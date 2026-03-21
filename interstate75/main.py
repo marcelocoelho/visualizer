@@ -2,11 +2,11 @@
 Interstate 75 - RGB LED Matrix Driver (direct framebuffer + viper)
 Receives 32x32 pixel frames over USB serial from the web visualizer.
 
-Protocol:
+Protocol (no ACK — fire and forget):
   - Scan for sync byte 0xFF (pixel values capped at 0xFE by sender)
   - Read 3072 bytes (32*32 pixels * 3 bytes RGB)
-  - Blit directly into PicoGraphics framebuffer with RGB→BGR swap
-  - Send back ACK byte 0x06 when ready for next frame
+  - Blit directly into PicoGraphics framebuffer
+  - If data is lost, board resyncs on next 0xFF automatically
 
 Install: Copy this file as main.py to the Interstate 75 via Thonny.
 Requires: Pimoroni MicroPython firmware with Interstate 75 support.
@@ -25,7 +25,6 @@ WIDTH = 32
 HEIGHT = 32
 FRAME_SIZE = WIDTH * HEIGHT * 3  # 3072 bytes
 SYNC_BYTE = 0xFF
-ACK_BYTE = 0x06
 
 # --- Setup display ---
 i75 = Interstate75(display=DISPLAY_INTERSTATE75_32X32)
@@ -36,13 +35,10 @@ graphics.set_backlight(1.0)
 fb = memoryview(graphics)
 FB_SIZE = len(fb)
 
-# Pre-allocate ACK buffer
-_ack = bytes([ACK_BYTE])
-
 
 @micropython.viper
 def blit_rgb_to_bgr(fb_ptr, frame_ptr, n: int):
-    """Swap RGB→BGR and copy into framebuffer. Viper = near-C speed."""
+    """Swap RGB->BGR and copy into framebuffer. Viper = near-C speed."""
     fb_buf = ptr8(fb_ptr)
     src = ptr8(frame_ptr)
     for i in range(0, n, 3):
@@ -89,16 +85,15 @@ def main():
     # Pre-allocate frame buffer
     frame = bytearray(FRAME_SIZE)
 
-    print("FB size: {}, frame size: {}".format(FB_SIZE, FRAME_SIZE))
-
-    # Determine if we need RGB→BGR swap
-    # Write a known red pixel via API and check byte order in framebuffer
+    # Determine if we need RGB->BGR swap
     graphics.set_pen(graphics.create_pen(255, 0, 0))
     graphics.pixel(0, 0)
-    needs_swap = (fb[0] != 255)  # If first byte isn't R, buffer is BGR
+    needs_swap = (fb[0] != 255)
     graphics.set_pen(graphics.create_pen(0, 0, 0))
     graphics.clear()
-    print("BGR swap: {}".format(needs_swap))
+
+    # Pick the right blit function once
+    blit = blit_rgb_to_bgr if needs_swap else blit_direct
 
     while True:
         # Wait for sync byte
@@ -114,17 +109,9 @@ def main():
                 frame[pos:pos + len(chunk)] = chunk
                 pos += len(chunk)
 
-        # Blit into framebuffer
-        if needs_swap:
-            blit_rgb_to_bgr(fb, frame, FRAME_SIZE)
-        else:
-            blit_direct(fb, frame, FRAME_SIZE)
-
+        # Blit + update (no ACK — just go as fast as possible)
+        blit(fb, frame, FRAME_SIZE)
         i75.update()
-
-        # ACK
-        sys.stdout.buffer.write(_ack)
-        sys.stdout.flush()
 
 
 if __name__ == "__main__":
