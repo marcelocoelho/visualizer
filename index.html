@@ -84,8 +84,8 @@
 
 <div id="brightness-control">
   <label for="brightness">Brightness:</label>
-  <input type="range" id="brightness" min="5" max="100" value="50">
-  <span id="brightness-val">50%</span>
+  <input type="range" id="brightness" min="5" max="100" value="100">
+  <span id="brightness-val">100%</span>
 </div>
 
 <script>
@@ -197,7 +197,6 @@ async function readAcks() {
       const { value, done } = await reader.read();
       if (done) break;
       if (value) {
-        console.log('Serial RX:', Array.from(value).map(b => '0x' + b.toString(16).padStart(2,'0')).join(' '));
         for (const byte of value) {
           if (byte === ACK_BYTE) {
             waitingForAck = false;
@@ -216,31 +215,34 @@ async function readAcks() {
 async function sendFrame() {
   if (!serialConnected || !writer) return;
 
-  // Timeout: if ACK hasn't come back in 500ms, send anyway
+  // Timeout: if ACK hasn't come back in 100ms, send anyway
   if (waitingForAck) {
-    const now = performance.now();
-    if (now - lastSendTime < 500) {
+    if (performance.now() - lastSendTime < 100) {
       frameDropped++;
       return;
     }
-    console.warn('ACK timeout — sending anyway');
     waitingForAck = false;
   }
 
   try {
     const brightness = brightnessSlider.value / 100;
 
-    // Apply brightness and cap at 0xFE to avoid sync byte collision
-    for (let i = 0; i < FRAME_SIZE; i++) {
-      const v = (frameBuffer[i] * brightness) | 0;
-      serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
+    if (brightness >= 1.0) {
+      // Fast path: no scaling needed, just cap at 0xFE
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        serialPacket[1 + i] = frameBuffer[i] >= 0xFF ? 0xFE : frameBuffer[i];
+      }
+    } else {
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const v = (frameBuffer[i] * brightness) | 0;
+        serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
+      }
     }
 
     waitingForAck = true;
     lastSendTime = performance.now();
     await writer.write(serialPacket);
     framesSent++;
-    if (framesSent <= 3) console.log(`Frame #${framesSent} sent (${serialPacket.length} bytes)`);
 
     // Update FPS counter
     const now = performance.now();

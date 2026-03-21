@@ -1,10 +1,11 @@
 """
-Interstate 75 - RGB LED Matrix Driver (speed-optimized)
+Interstate 75 - RGB LED Matrix Driver (direct framebuffer + viper)
 Receives 32x32 pixel frames over USB serial from the web visualizer.
 
 Protocol:
   - Scan for sync byte 0xFF (pixel values capped at 0xFE by sender)
   - Read 3072 bytes (32*32 pixels * 3 bytes RGB)
+  - Blit directly into PicoGraphics framebuffer with RGB→BGR swap
   - Send back ACK byte 0x06 when ready for next frame
 
 Install: Copy this file as main.py to the Interstate 75 via Thonny.
@@ -25,37 +26,38 @@ HEIGHT = 32
 FRAME_SIZE = WIDTH * HEIGHT * 3  # 3072 bytes
 SYNC_BYTE = 0xFF
 ACK_BYTE = 0x06
-BRIGHTNESS = 0.5
 
 # --- Setup display ---
 i75 = Interstate75(display=DISPLAY_INTERSTATE75_32X32)
 graphics = i75.display
-graphics.set_backlight(BRIGHTNESS)
+graphics.set_backlight(1.0)
 
-# Pre-build RGB565 pen lookup table.
-# Quantize to 4 bits per channel (12-bit color = 4096 entries).
-# This covers all visible colors with fast index computation.
-_pen_lut = []
-for _i in range(4096):
-    _r = ((_i >> 8) & 0x0F) * 17   # 0-255
-    _g = ((_i >> 4) & 0x0F) * 17   # 0-255
-    _b = (_i & 0x0F) * 17          # 0-255
-    _pen_lut.append(graphics.create_pen(_r, _g, _b))
+# Get direct framebuffer access
+fb = memoryview(graphics)
+FB_SIZE = len(fb)
+
+# Pre-allocate ACK buffer
+_ack = bytes([ACK_BYTE])
 
 
-@micropython.native
-def draw_frame(frame, lut):
-    """Draw RGB888 frame with 12-bit quantized LUT — native compiled."""
-    _set_pen = graphics.set_pen
-    _pixel = graphics.pixel
-    idx = 0
-    for y in range(32):
-        for x in range(32):
-            # Quantize RGB888 to 12-bit (4 bits per channel) for LUT index
-            key = ((frame[idx] & 0xF0) << 4) | (frame[idx + 1] & 0xF0) | (frame[idx + 2] >> 4)
-            _set_pen(lut[key])
-            _pixel(x, y)
-            idx += 3
+@micropython.viper
+def blit_rgb_to_bgr(fb_ptr, frame_ptr, n: int):
+    """Swap RGB→BGR and copy into framebuffer. Viper = near-C speed."""
+    fb_buf = ptr8(fb_ptr)
+    src = ptr8(frame_ptr)
+    for i in range(0, n, 3):
+        fb_buf[i] = src[i + 2]      # B
+        fb_buf[i + 1] = src[i + 1]  # G
+        fb_buf[i + 2] = src[i]      # R
+
+
+@micropython.viper
+def blit_direct(fb_ptr, frame_ptr, n: int):
+    """Direct copy without channel swap. Viper = near-C speed."""
+    fb_buf = ptr8(fb_ptr)
+    src = ptr8(frame_ptr)
+    for i in range(n):
+        fb_buf[i] = src[i]
 
 
 def show_startup():
@@ -73,19 +75,6 @@ def show_startup():
     i75.update()
 
 
-def send_ack():
-    """Send ACK byte and flush."""
-    sys.stdout.buffer.write(bytes([ACK_BYTE]))
-    try:
-        sys.stdout.buffer.flush()
-    except:
-        pass
-    try:
-        sys.stdout.flush()
-    except:
-        pass
-
-
 def show_waiting():
     """Red pixel in corner = waiting for serial data."""
     graphics.set_pen(graphics.create_pen(30, 0, 0))
@@ -99,10 +88,20 @@ def main():
 
     # Pre-allocate frame buffer
     frame = bytearray(FRAME_SIZE)
-    lut = _pen_lut
+
+    print("FB size: {}, frame size: {}".format(FB_SIZE, FRAME_SIZE))
+
+    # Determine if we need RGB→BGR swap
+    # Write a known red pixel via API and check byte order in framebuffer
+    graphics.set_pen(graphics.create_pen(255, 0, 0))
+    graphics.pixel(0, 0)
+    needs_swap = (fb[0] != 255)  # If first byte isn't R, buffer is BGR
+    graphics.set_pen(graphics.create_pen(0, 0, 0))
+    graphics.clear()
+    print("BGR swap: {}".format(needs_swap))
 
     while True:
-        # Wait for sync byte (only 0xFF — pixel data is capped at 0xFE)
+        # Wait for sync byte
         b = sys.stdin.buffer.read(1)
         if not b or b[0] != SYNC_BYTE:
             continue
@@ -115,12 +114,17 @@ def main():
                 frame[pos:pos + len(chunk)] = chunk
                 pos += len(chunk)
 
-        # Draw and update
-        draw_frame(frame, lut)
+        # Blit into framebuffer
+        if needs_swap:
+            blit_rgb_to_bgr(fb, frame, FRAME_SIZE)
+        else:
+            blit_direct(fb, frame, FRAME_SIZE)
+
         i75.update()
 
-        # ACK — ready for next frame
-        send_ack()
+        # ACK
+        sys.stdout.buffer.write(_ack)
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":
