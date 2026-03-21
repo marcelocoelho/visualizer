@@ -23,7 +23,9 @@ micropython.kbd_intr(-1)
 # --- Configuration ---
 WIDTH = 32
 HEIGHT = 32
-FRAME_SIZE = WIDTH * HEIGHT * 3  # 3072 bytes
+PIXELS = WIDTH * HEIGHT            # 1024
+FRAME_SIZE = PIXELS                # 1024 bytes (RGB332, 1 byte/pixel)
+FB_BYTES = PIXELS * 3              # 3072 bytes in framebuffer (RGB888)
 SYNC_BYTE = 0xFF
 
 # --- Setup display ---
@@ -37,23 +39,28 @@ FB_SIZE = len(fb)
 
 
 @micropython.viper
-def blit_rgb_to_bgr(fb_ptr, frame_ptr, n: int):
-    """Swap RGB->BGR and copy into framebuffer. Viper = near-C speed."""
-    fb_buf = ptr8(fb_ptr)
-    src = ptr8(frame_ptr)
-    for i in range(0, n, 3):
-        fb_buf[i] = src[i + 2]      # B
-        fb_buf[i + 1] = src[i + 1]  # G
-        fb_buf[i + 2] = src[i]      # R
-
-
-@micropython.viper
-def blit_direct(fb_ptr, frame_ptr, n: int):
-    """Direct copy without channel swap. Viper = near-C speed."""
+def blit_332_to_rgb(fb_ptr, frame_ptr, n: int):
+    """Expand RGB332 (1 byte/pixel) → RGB888 framebuffer. Viper = near-C speed."""
     fb_buf = ptr8(fb_ptr)
     src = ptr8(frame_ptr)
     for i in range(n):
-        fb_buf[i] = src[i]
+        v = int(src[i])
+        # RGB332: RRRGGGBB → expand to 8-bit per channel
+        fb_buf[i * 3] = (v >> 5) * 36         # R: 3 bits → 0-252
+        fb_buf[i * 3 + 1] = ((v >> 2) & 7) * 36  # G: 3 bits → 0-252
+        fb_buf[i * 3 + 2] = (v & 3) * 85      # B: 2 bits → 0-255
+
+
+@micropython.viper
+def blit_332_to_bgr(fb_ptr, frame_ptr, n: int):
+    """Expand RGB332 (1 byte/pixel) → BGR888 framebuffer. Viper = near-C speed."""
+    fb_buf = ptr8(fb_ptr)
+    src = ptr8(frame_ptr)
+    for i in range(n):
+        v = int(src[i])
+        fb_buf[i * 3] = (v & 3) * 85          # B: 2 bits → 0-255
+        fb_buf[i * 3 + 1] = ((v >> 2) & 7) * 36  # G: 3 bits → 0-252
+        fb_buf[i * 3 + 2] = (v >> 5) * 36     # R: 3 bits → 0-252
 
 
 def show_startup():
@@ -93,7 +100,7 @@ def main():
     graphics.clear()
 
     # Pick the right blit function once
-    blit = blit_rgb_to_bgr if needs_swap else blit_direct
+    blit = blit_332_to_bgr if needs_swap else blit_332_to_rgb
 
     while True:
         # Wait for sync byte
@@ -101,7 +108,7 @@ def main():
         if not b or b[0] != SYNC_BYTE:
             continue
 
-        # Read frame into pre-allocated buffer
+        # Read RGB332 frame (1024 bytes instead of 3072)
         pos = 0
         while pos < FRAME_SIZE:
             chunk = sys.stdin.buffer.read(FRAME_SIZE - pos)
@@ -109,8 +116,8 @@ def main():
                 frame[pos:pos + len(chunk)] = chunk
                 pos += len(chunk)
 
-        # Blit + update (no ACK — just go as fast as possible)
-        blit(fb, frame, FRAME_SIZE)
+        # Expand RGB332 → RGB888/BGR888 into framebuffer + update
+        blit(fb, frame, PIXELS)
         i75.update()
 
 

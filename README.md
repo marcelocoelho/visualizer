@@ -44,11 +44,12 @@ Fire-and-forget streaming at 1.5 Mbaud:
 | Byte(s) | Description |
 |---------|-------------|
 | `0xFF` | Sync byte (frame start marker) |
-| 3072 bytes | RGB888 pixel data (32x32 x 3 bytes) |
+| 1024 bytes | RGB332 pixel data (1 byte per pixel, 32x32) |
 
+- RGB332 encoding: 3 bits red, 3 bits green, 2 bits blue per pixel
 - Pixel values are capped at `0xFE` so the sync byte `0xFF` is unambiguous
 - No ACK — the board resyncs on the next `0xFF` if any data is lost
-- The board writes directly into the PicoGraphics framebuffer using Viper-compiled blitting for near-C speed
+- The board expands RGB332 → RGB888 directly into the PicoGraphics framebuffer using Viper-compiled blitting (near-C speed)
 
 ## Files
 
