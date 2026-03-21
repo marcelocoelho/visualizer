@@ -9,12 +9,34 @@
   body {
     background: #111;
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
     font-family: monospace;
     color: #aaa;
+  }
+  #sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-right: 24px;
+    min-width: 140px;
+  }
+  #sidebar button {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-left: 3px solid transparent;
+  }
+  #sidebar button.active {
+    background: #1a2a3a;
+    border-left-color: #4a9eff;
+    color: #fff;
+  }
+  #main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
   #controls {
     display: flex;
@@ -64,35 +86,39 @@
 </head>
 <body>
 
-<div id="controls">
-  <button id="connect-btn" onclick="toggleSerial()">Connect Interstate 75</button>
-  <span id="status">disconnected</span>
-  <span id="fps-display"></span>
+<div id="sidebar">
+  <div style="font-size:11px; color:#666; margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Animations</div>
 </div>
 
-<canvas id="display" width="32" height="32" style="width:512px;height:512px;"></canvas>
+<div id="main">
+  <div id="controls">
+    <button id="connect-btn" onclick="toggleSerial()">Connect Interstate 75</button>
+    <span id="status">disconnected</span>
+    <span id="fps-display"></span>
+  </div>
 
-<div id="brightness-control">
-  <label for="brightness">Brightness:</label>
-  <input type="range" id="brightness" min="5" max="100" value="100">
-  <span id="brightness-val">100%</span>
+  <canvas id="display" width="32" height="32" style="width:512px;height:512px;"></canvas>
+
+  <div id="brightness-control">
+    <label for="brightness">Brightness:</label>
+    <input type="range" id="brightness" min="5" max="100" value="100">
+    <span id="brightness-val">100%</span>
+  </div>
 </div>
 
 <script>
 const W = 32, H = 32;
-const PIXELS = W * H;               // 1024
-const FRAME_SIZE = PIXELS * 3;       // 3072 bytes RGB888
+const PIXELS = W * H;
+const FRAME_SIZE = PIXELS * 3;
 const SYNC_BYTE = 0xFF;
 
 // --- Canvas setup ---
 const canvas = document.getElementById('display');
 const ctx = canvas.getContext('2d');
 const imageData = ctx.createImageData(W, H);
-const imgBuf = imageData.data; // Uint8ClampedArray RGBA
+const imgBuf = imageData.data;
 
-// Frame buffer: RGB888 for display
 const frameBuffer = new Uint8Array(FRAME_SIZE);
-// Serial packet: sync byte + RGB888 pixels (pre-allocated)
 const serialPacket = new Uint8Array(1 + FRAME_SIZE);
 serialPacket[0] = SYNC_BYTE;
 
@@ -115,17 +141,16 @@ function addPixel(x, y, r, g, b) {
 }
 
 function flushDisplay() {
-  // Convert RGB frameBuffer → RGBA imageData in one pass
   for (let i = 0, j = 0; i < FRAME_SIZE; i += 3, j += 4) {
     imgBuf[j] = frameBuffer[i];
     imgBuf[j + 1] = frameBuffer[i + 1];
     imgBuf[j + 2] = frameBuffer[i + 2];
-    imgBuf[j + 3] = 255; // alpha
+    imgBuf[j + 3] = 255;
   }
   ctx.putImageData(imageData, 0, 0);
 }
 
-// --- Serial connection (fire-and-forget, no ACK) ---
+// --- Serial ---
 let port = null;
 let writer = null;
 let serialConnected = false;
@@ -144,20 +169,15 @@ brightnessSlider.addEventListener('input', () => {
 });
 
 async function toggleSerial() {
-  if (serialConnected) {
-    await disconnectSerial();
-  } else {
-    await connectSerial();
-  }
+  if (serialConnected) await disconnectSerial();
+  else await connectSerial();
 }
 
 async function connectSerial() {
   try {
     port = await navigator.serial.requestPort();
     await port.open({ baudRate: 1500000 });
-
     writer = port.writable.getWriter();
-
     serialConnected = true;
     connectBtn.textContent = 'Disconnect';
     connectBtn.classList.add('connected');
@@ -175,8 +195,7 @@ async function disconnectSerial() {
   try {
     if (writer) { writer.releaseLock(); writer = null; }
     if (port) { await port.close(); port = null; }
-  } catch (e) { /* ignore cleanup errors */ }
-
+  } catch (e) {}
   connectBtn.textContent = 'Connect Interstate 75';
   connectBtn.classList.remove('connected');
   statusEl.textContent = 'disconnected';
@@ -187,10 +206,7 @@ async function disconnectSerial() {
 function sendFrame() {
   if (!serialConnected || !writer || sending) return;
   sending = true;
-
   const brightness = brightnessSlider.value / 100;
-
-  // Apply brightness and cap at 0xFE to avoid sync byte collision
   if (brightness >= 1.0) {
     for (let i = 0; i < FRAME_SIZE; i++) {
       serialPacket[1 + i] = frameBuffer[i] >= 0xFF ? 0xFE : frameBuffer[i];
@@ -201,17 +217,13 @@ function sendFrame() {
       serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
     }
   }
-
-  // Fire and forget — don't await, don't block animation loop
   writer.write(serialPacket).then(() => {
     sending = false;
     framesSent++;
   }).catch((e) => {
     sending = false;
-    console.error('Serial write error:', e);
     disconnectSerial();
   });
-
   const now = performance.now();
   if (now - lastFpsTime > 1000) {
     const fps = Math.round(framesSent / ((now - lastFpsTime) / 1000));
@@ -221,115 +233,391 @@ function sendFrame() {
   }
 }
 
-// --- Animation: particles on black ---
+// =============================================
+// ANIMATION SYSTEM
+// =============================================
 let t = 0;
+let currentAnimation = null;
 
-// Particle system
-const NUM_PARTICLES = 12;
-const particles = [];
-for (let i = 0; i < NUM_PARTICLES; i++) {
-  particles.push({
-    cx: 16, cy: 16,
-    rx: 4 + Math.random() * 11,
-    ry: 4 + Math.random() * 11,
-    speed: 0.3 + Math.random() * 0.8,
-    phase: Math.random() * Math.PI * 2,
-    r: Math.floor(80 + Math.random() * 175),
-    g: Math.floor(80 + Math.random() * 175),
-    b: Math.floor(80 + Math.random() * 175),
-    size: 1.5 + Math.random() * 1.5,
-    trail: [],
-    trailLen: 4 + Math.floor(Math.random() * 6),
-  });
-}
+const animations = {};
 
-// Shooting stars (occasional)
-const shootingStars = [];
+// --- 1. Orbiting Particles ---
+animations['Particles'] = (() => {
+  const NUM = 12;
+  const particles = [];
+  const shootingStars = [];
 
-function spawnShootingStar() {
-  const edge = Math.floor(Math.random() * 4);
-  let sx, sy, vx, vy;
-  if (edge === 0) { sx = -1; sy = Math.random() * H; vx = 1.5 + Math.random(); vy = (Math.random() - 0.5) * 0.8; }
-  else if (edge === 1) { sx = W; sy = Math.random() * H; vx = -(1.5 + Math.random()); vy = (Math.random() - 0.5) * 0.8; }
-  else if (edge === 2) { sx = Math.random() * W; sy = -1; vx = (Math.random() - 0.5) * 0.8; vy = 1.5 + Math.random(); }
-  else { sx = Math.random() * W; sy = H; vx = (Math.random() - 0.5) * 0.8; vy = -(1.5 + Math.random()); }
-  shootingStars.push({ x: sx, y: sy, vx, vy, life: 1.0 });
-}
-
-function animate() {
-  t += 0.03;
-
-  // Clear buffer to black
-  frameBuffer.fill(0);
-
-  // Occasionally spawn shooting stars
-  if (Math.random() < 0.02) spawnShootingStar();
-
-  // Update and draw shooting stars
-  for (let i = shootingStars.length - 1; i >= 0; i--) {
-    const s = shootingStars[i];
-    s.x += s.vx;
-    s.y += s.vy;
-    s.life -= 0.03;
-    if (s.life <= 0 || s.x < -2 || s.x > W + 2 || s.y < -2 || s.y > H + 2) {
-      shootingStars.splice(i, 1);
-      continue;
-    }
-    for (let j = 0; j < 4; j++) {
-      const tx = Math.round(s.x - s.vx * j * 0.4);
-      const ty = Math.round(s.y - s.vy * j * 0.4);
-      const fade = s.life * (1 - j * 0.25);
-      if (tx >= 0 && tx < W && ty >= 0 && ty < H) {
-        addPixel(tx, ty, (255 * fade) | 0, (255 * fade) | 0, (200 * fade) | 0);
-      }
+  function init() {
+    particles.length = 0;
+    shootingStars.length = 0;
+    for (let i = 0; i < NUM; i++) {
+      particles.push({
+        cx: 16, cy: 16,
+        rx: 4 + Math.random() * 11, ry: 4 + Math.random() * 11,
+        speed: 0.3 + Math.random() * 0.8,
+        phase: Math.random() * Math.PI * 2,
+        r: 80 + Math.random() * 175 | 0,
+        g: 80 + Math.random() * 175 | 0,
+        b: 80 + Math.random() * 175 | 0,
+        size: 1.5 + Math.random() * 1.5,
+        trail: [], trailLen: 4 + (Math.random() * 6 | 0),
+      });
     }
   }
 
-  // Update and draw particles
-  for (const p of particles) {
-    const angle = t * p.speed + p.phase;
-    const wobble = Math.sin(t * 0.7 + p.phase * 2) * 3;
-    const x = p.cx + Math.cos(angle) * (p.rx + wobble);
-    const y = p.cy + Math.sin(angle) * (p.ry + wobble * 0.5);
-
-    // Update trail
-    p.trail.unshift({ x, y });
-    if (p.trail.length > p.trailLen) p.trail.pop();
-
-    // Draw trail (fading)
-    for (let i = p.trail.length - 1; i >= 0; i--) {
-      const fade = (1 - i / p.trailLen) * 0.4;
-      const tx = Math.round(p.trail[i].x);
-      const ty = Math.round(p.trail[i].y);
-      if (tx >= 0 && tx < W && ty >= 0 && ty < H) {
-        addPixel(tx, ty, (p.r * fade) | 0, (p.g * fade) | 0, (p.b * fade) | 0);
+  function draw(t) {
+    frameBuffer.fill(0);
+    if (Math.random() < 0.02) {
+      const edge = Math.random() * 4 | 0;
+      let sx, sy, vx, vy;
+      if (edge === 0) { sx = -1; sy = Math.random() * H; vx = 1.5 + Math.random(); vy = (Math.random() - 0.5) * 0.8; }
+      else if (edge === 1) { sx = W; sy = Math.random() * H; vx = -(1.5 + Math.random()); vy = (Math.random() - 0.5) * 0.8; }
+      else if (edge === 2) { sx = Math.random() * W; sy = -1; vx = (Math.random() - 0.5) * 0.8; vy = 1.5 + Math.random(); }
+      else { sx = Math.random() * W; sy = H; vx = (Math.random() - 0.5) * 0.8; vy = -(1.5 + Math.random()); }
+      shootingStars.push({ x: sx, y: sy, vx, vy, life: 1.0 });
+    }
+    for (let i = shootingStars.length - 1; i >= 0; i--) {
+      const s = shootingStars[i];
+      s.x += s.vx; s.y += s.vy; s.life -= 0.03;
+      if (s.life <= 0 || s.x < -2 || s.x > W + 2 || s.y < -2 || s.y > H + 2) { shootingStars.splice(i, 1); continue; }
+      for (let j = 0; j < 4; j++) {
+        const tx = Math.round(s.x - s.vx * j * 0.4), ty = Math.round(s.y - s.vy * j * 0.4);
+        const fade = s.life * (1 - j * 0.25);
+        if (tx >= 0 && tx < W && ty >= 0 && ty < H) addPixel(tx, ty, (255 * fade) | 0, (255 * fade) | 0, (200 * fade) | 0);
       }
     }
-
-    // Draw particle glow
-    const px = Math.round(x);
-    const py = Math.round(y);
-    const radius = Math.ceil(p.size);
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d <= p.size) {
-          const br = 1 - d / (p.size + 0.5);
-          const sx = px + dx, sy = py + dy;
-          if (sx >= 0 && sx < W && sy >= 0 && sy < H) {
-            addPixel(sx, sy, (p.r * br) | 0, (p.g * br) | 0, (p.b * br) | 0);
+    for (const p of particles) {
+      const angle = t * p.speed + p.phase;
+      const wobble = Math.sin(t * 0.7 + p.phase * 2) * 3;
+      const x = p.cx + Math.cos(angle) * (p.rx + wobble);
+      const y = p.cy + Math.sin(angle) * (p.ry + wobble * 0.5);
+      p.trail.unshift({ x, y });
+      if (p.trail.length > p.trailLen) p.trail.pop();
+      for (let i = p.trail.length - 1; i >= 0; i--) {
+        const fade = (1 - i / p.trailLen) * 0.4;
+        const tx = Math.round(p.trail[i].x), ty = Math.round(p.trail[i].y);
+        if (tx >= 0 && tx < W && ty >= 0 && ty < H) addPixel(tx, ty, (p.r * fade) | 0, (p.g * fade) | 0, (p.b * fade) | 0);
+      }
+      const px = Math.round(x), py = Math.round(y), radius = Math.ceil(p.size);
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d <= p.size) {
+            const br = 1 - d / (p.size + 0.5);
+            const sx = px + dx, sy = py + dy;
+            if (sx >= 0 && sx < W && sy >= 0 && sy < H) addPixel(sx, sy, (p.r * br) | 0, (p.g * br) | 0, (p.b * br) | 0);
           }
         }
       }
     }
   }
 
-  // Single putImageData call replaces 1024 DOM updates
+  return { init, draw };
+})();
+
+// --- 2. Plasma ---
+animations['Plasma'] = (() => {
+  function init() {}
+  function draw(t) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const v1 = Math.sin(x * 0.3 + t * 2);
+        const v2 = Math.sin(y * 0.3 + t * 1.5);
+        const v3 = Math.sin((x + y) * 0.2 + t);
+        const v4 = Math.sin(Math.sqrt(((x - 16) * (x - 16) + (y - 16) * (y - 16))) * 0.3 - t * 2);
+        const v = (v1 + v2 + v3 + v4) / 4;
+        const r = (Math.sin(v * Math.PI + t) * 0.5 + 0.5) * 255 | 0;
+        const g = (Math.sin(v * Math.PI + t + 2.094) * 0.5 + 0.5) * 255 | 0;
+        const b = (Math.sin(v * Math.PI + t + 4.189) * 0.5 + 0.5) * 255 | 0;
+        setPixel(x, y, r, g, b);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 3. Rainbow Wave ---
+animations['Rainbow Wave'] = (() => {
+  function init() {}
+  function draw(t) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const hue = ((x + y) * 8 + t * 80) % 360;
+        const s = 1, l = 0.5;
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const X = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        const m = l - c / 2;
+        let r, g, b;
+        if (hue < 60) { r = c; g = X; b = 0; }
+        else if (hue < 120) { r = X; g = c; b = 0; }
+        else if (hue < 180) { r = 0; g = c; b = X; }
+        else if (hue < 240) { r = 0; g = X; b = c; }
+        else if (hue < 300) { r = X; g = 0; b = c; }
+        else { r = c; g = 0; b = X; }
+        setPixel(x, y, ((r + m) * 255) | 0, ((g + m) * 255) | 0, ((b + m) * 255) | 0);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 4. Gradient ---
+animations['Gradient'] = (() => {
+  // Color A and B slowly shift over time
+  function hsl2rgb(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const X = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = X; b = 0; }
+    else if (h < 120) { r = X; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = X; }
+    else if (h < 240) { r = 0; g = X; b = c; }
+    else if (h < 300) { r = X; g = 0; b = c; }
+    else { r = c; g = 0; b = X; }
+    return [((r + m) * 255) | 0, ((g + m) * 255) | 0, ((b + m) * 255) | 0];
+  }
+  function init() {}
+  function draw(t) {
+    // Two colors that drift through the spectrum at different speeds
+    const hueA = (t * 25) % 360;
+    const hueB = (t * 25 + 150) % 360;
+    const [rA, gA, bA] = hsl2rgb(hueA, 1, 0.5);
+    const [rB, gB, bB] = hsl2rgb(hueB, 1, 0.5);
+
+    // Animate gradient direction: rotates slowly
+    const angle = t * 0.4;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        // Project pixel position onto gradient axis (-1 to 1 range, centered)
+        const proj = ((x - 16) * dx + (y - 16) * dy) / 22;
+        const f = proj * 0.5 + 0.5; // 0..1
+        const r = (rA + (rB - rA) * f) | 0;
+        const g = (gA + (gB - gA) * f) | 0;
+        const b = (bA + (bB - bA) * f) | 0;
+        setPixel(x, y, Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b)));
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 5. Fire ---
+animations['Fire'] = (() => {
+  const buf = new Float32Array(W * (H + 2));
+  function init() { buf.fill(0); }
+  function draw(t) {
+    // Heat bottom row
+    for (let x = 0; x < W; x++) {
+      buf[(H + 1) * W + x] = Math.random() * 1.5;
+      buf[H * W + x] = Math.random() * 1.2;
+    }
+    // Propagate up with cooling
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const xl = x > 0 ? x - 1 : W - 1;
+        const xr = x < W - 1 ? x + 1 : 0;
+        const heat = (buf[(y + 1) * W + xl] + buf[(y + 1) * W + x] * 2 + buf[(y + 1) * W + xr] + buf[(y + 2) * W + x]) / 5.8;
+        buf[y * W + x] = Math.max(0, heat - 0.01);
+      }
+    }
+    // Render
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const h = buf[y * W + x];
+        const r = Math.min(255, h * 400) | 0;
+        const g = Math.min(255, Math.max(0, (h - 0.3) * 500)) | 0;
+        const b = Math.min(255, Math.max(0, (h - 0.7) * 600)) | 0;
+        setPixel(x, y, r, g, b);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 5. Matrix Rain ---
+animations['Matrix Rain'] = (() => {
+  const drops = [];
+  function init() {
+    drops.length = 0;
+    for (let x = 0; x < W; x++) {
+      drops.push({ x, y: Math.random() * -H, speed: 0.3 + Math.random() * 0.7, len: 4 + (Math.random() * 10 | 0) });
+    }
+  }
+  function draw(t) {
+    frameBuffer.fill(0);
+    for (const d of drops) {
+      d.y += d.speed;
+      if (d.y - d.len > H) { d.y = Math.random() * -8; d.speed = 0.3 + Math.random() * 0.7; d.len = 4 + (Math.random() * 10 | 0); }
+      for (let i = 0; i < d.len; i++) {
+        const py = Math.round(d.y - i);
+        if (py >= 0 && py < H) {
+          const fade = 1 - i / d.len;
+          if (i === 0) setPixel(d.x, py, 180, 255, 180);
+          else addPixel(d.x, py, 0, (180 * fade * fade) | 0, 0);
+        }
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 6. Game of Life ---
+animations['Game of Life'] = (() => {
+  let grid = new Uint8Array(W * H);
+  let next = new Uint8Array(W * H);
+  let staleCount = 0;
+  let lastHash = 0;
+
+  function init() {
+    for (let i = 0; i < W * H; i++) grid[i] = Math.random() < 0.3 ? 1 : 0;
+    staleCount = 0; lastHash = 0;
+  }
+  function draw(t) {
+    // Compute hash to detect stale states
+    let hash = 0;
+    for (let i = 0; i < W * H; i++) hash = (hash * 31 + grid[i]) | 0;
+    if (hash === lastHash) staleCount++; else staleCount = 0;
+    lastHash = hash;
+    if (staleCount > 30) init(); // Re-seed if stuck
+
+    // Step
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = (x + dx + W) % W, ny = (y + dy + H) % H;
+            n += grid[ny * W + nx];
+          }
+        }
+        const alive = grid[y * W + x];
+        next[y * W + x] = (alive && (n === 2 || n === 3)) || (!alive && n === 3) ? 1 : 0;
+      }
+    }
+    [grid, next] = [next, grid];
+
+    // Render
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (grid[y * W + x]) {
+          const hue = ((x * 11 + y * 7) * 3) % 360;
+          const c = 1, X = c * (1 - Math.abs((hue / 60) % 2 - 1)), m = 0;
+          let r, g, b;
+          if (hue < 60) { r = c; g = X; b = 0; }
+          else if (hue < 120) { r = X; g = c; b = 0; }
+          else if (hue < 180) { r = 0; g = c; b = X; }
+          else if (hue < 240) { r = 0; g = X; b = c; }
+          else if (hue < 300) { r = X; g = 0; b = c; }
+          else { r = c; g = 0; b = X; }
+          setPixel(x, y, (r * 200) | 0, (g * 200) | 0, (b * 200) | 0);
+        } else {
+          setPixel(x, y, 0, 0, 0);
+        }
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 7. Starfield ---
+animations['Starfield'] = (() => {
+  const NUM = 80;
+  const stars = [];
+  function init() {
+    stars.length = 0;
+    for (let i = 0; i < NUM; i++) {
+      stars.push({ x: (Math.random() - 0.5) * 64, y: (Math.random() - 0.5) * 64, z: Math.random() * 32 });
+    }
+  }
+  function draw(t) {
+    frameBuffer.fill(0);
+    for (const s of stars) {
+      s.z -= 0.3;
+      if (s.z <= 0.1) { s.x = (Math.random() - 0.5) * 64; s.y = (Math.random() - 0.5) * 64; s.z = 32; }
+      const sx = (s.x / s.z) * 16 + 16;
+      const sy = (s.y / s.z) * 16 + 16;
+      const br = Math.min(255, (1 - s.z / 32) * 300) | 0;
+      const px = Math.round(sx), py = Math.round(sy);
+      if (px >= 0 && px < W && py >= 0 && py < H) {
+        addPixel(px, py, br, br, br);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 8. Ripples ---
+animations['Ripples'] = (() => {
+  const ripples = [];
+  let lastSpawn = 0;
+  function init() { ripples.length = 0; lastSpawn = 0; }
+  function draw(t) {
+    frameBuffer.fill(0);
+    if (t - lastSpawn > 1.5) {
+      ripples.push({ cx: 4 + Math.random() * 24, cy: 4 + Math.random() * 24, t: t, hue: Math.random() * 360 });
+      lastSpawn = t;
+      if (ripples.length > 6) ripples.shift();
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let val = 0;
+        for (const rip of ripples) {
+          const d = Math.sqrt((x - rip.cx) ** 2 + (y - rip.cy) ** 2);
+          const age = t - rip.t;
+          const wave = Math.sin(d * 1.5 - age * 6) * Math.max(0, 1 - age * 0.3) * Math.max(0, 1 - d * 0.05);
+          val += wave;
+        }
+        const br = Math.max(0, val);
+        const hue = (ripples.length > 0 ? ripples[ripples.length - 1].hue : 200);
+        const r = (br * (1 + Math.sin(hue * 0.0174)) * 80) | 0;
+        const g = (br * (1 + Math.sin((hue + 120) * 0.0174)) * 80) | 0;
+        const b = (br * (1 + Math.sin((hue + 240) * 0.0174)) * 80) | 0;
+        setPixel(x, y, Math.min(255, r), Math.min(255, g), Math.min(255, b));
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// =============================================
+// SIDEBAR SETUP
+// =============================================
+const sidebar = document.getElementById('sidebar');
+const animNames = Object.keys(animations);
+
+function selectAnimation(name) {
+  currentAnimation = name;
+  const anim = animations[name];
+  if (anim.init) anim.init();
+  // Update button states
+  for (const btn of sidebar.querySelectorAll('button')) {
+    btn.classList.toggle('active', btn.textContent === name);
+  }
+}
+
+for (const name of animNames) {
+  const btn = document.createElement('button');
+  btn.textContent = name;
+  btn.onclick = () => selectAnimation(name);
+  sidebar.appendChild(btn);
+}
+
+// Start with first animation
+selectAnimation(animNames[0]);
+
+// =============================================
+// MAIN LOOP
+// =============================================
+function animate() {
+  t += 0.03;
+  animations[currentAnimation].draw(t);
   flushDisplay();
-
-  // Send frame to device if connected
   sendFrame();
-
   requestAnimationFrame(animate);
 }
 
