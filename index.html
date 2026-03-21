@@ -82,7 +82,6 @@
 const W = 32, H = 32;
 const PIXELS = W * H;               // 1024
 const FRAME_SIZE = PIXELS * 3;       // 3072 bytes RGB888
-const SERIAL_SIZE = PIXELS;          // 1024 bytes RGB332
 const SYNC_BYTE = 0xFF;
 
 // --- Canvas setup ---
@@ -93,8 +92,8 @@ const imgBuf = imageData.data; // Uint8ClampedArray RGBA
 
 // Frame buffer: RGB888 for display
 const frameBuffer = new Uint8Array(FRAME_SIZE);
-// Serial packet: sync byte + RGB332 pixels (pre-allocated)
-const serialPacket = new Uint8Array(1 + SERIAL_SIZE);
+// Serial packet: sync byte + RGB888 pixels (pre-allocated)
+const serialPacket = new Uint8Array(1 + FRAME_SIZE);
 serialPacket[0] = SYNC_BYTE;
 
 function setPixel(x, y, r, g, b) {
@@ -191,19 +190,16 @@ function sendFrame() {
 
   const brightness = brightnessSlider.value / 100;
 
-  // Encode RGB888 → RGB332 (1 byte per pixel) with brightness
-  for (let i = 0, si = 0; si < PIXELS; i += 3, si++) {
-    let r, g, b;
-    if (brightness >= 1.0) {
-      r = frameBuffer[i]; g = frameBuffer[i + 1]; b = frameBuffer[i + 2];
-    } else {
-      r = (frameBuffer[i] * brightness) | 0;
-      g = (frameBuffer[i + 1] * brightness) | 0;
-      b = (frameBuffer[i + 2] * brightness) | 0;
+  // Apply brightness and cap at 0xFE to avoid sync byte collision
+  if (brightness >= 1.0) {
+    for (let i = 0; i < FRAME_SIZE; i++) {
+      serialPacket[1 + i] = frameBuffer[i] >= 0xFF ? 0xFE : frameBuffer[i];
     }
-    // RGB332: 3 bits R, 3 bits G, 2 bits B — cap at 0xFE
-    const v = (r & 0xE0) | ((g >> 3) & 0x1C) | (b >> 6);
-    serialPacket[1 + si] = v >= 0xFF ? 0xFE : v;
+  } else {
+    for (let i = 0; i < FRAME_SIZE; i++) {
+      const v = (frameBuffer[i] * brightness) | 0;
+      serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
+    }
   }
 
   // Fire and forget — don't await, don't block animation loop
