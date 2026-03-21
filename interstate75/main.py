@@ -1,9 +1,9 @@
 """
-Interstate 75 - RGB LED Matrix Driver (optimized)
+Interstate 75 - RGB LED Matrix Driver (speed-optimized)
 Receives 32x32 pixel frames over USB serial from the web visualizer.
 
 Protocol:
-  - Wait for sync byte 0xFF
+  - Scan for sync byte 0xFF (pixel values capped at 0xFE by sender)
   - Read 3072 bytes (32*32 pixels * 3 bytes RGB)
   - Send back ACK byte 0x06 when ready for next frame
 
@@ -17,8 +17,6 @@ import time
 from interstate75 import Interstate75, DISPLAY_INTERSTATE75_32X32
 
 # CRITICAL: Disable Ctrl+C (0x03) interrupt on stdin.
-# Without this, any frame pixel containing byte 0x03 crashes the program,
-# and byte 0x04 triggers a soft reset — causing the board to reboot.
 micropython.kbd_intr(-1)
 
 # --- Configuration ---
@@ -34,22 +32,34 @@ i75 = Interstate75(display=DISPLAY_INTERSTATE75_32X32)
 graphics = i75.display
 graphics.set_backlight(BRIGHTNESS)
 
-# Pre-build a full RGB332 pen lookup table (256 entries)
-# This avoids ALL dictionary lookups and create_pen calls during frame draw.
-# RGB332: 3 bits R, 3 bits G, 2 bits B — packed into one byte index.
-pen_lut = []
-for i in range(256):
-    r3 = (i >> 5) & 0x07
-    g3 = (i >> 2) & 0x07
-    b2 = i & 0x03
-    pen_lut.append(graphics.create_pen(r3 * 36, g3 * 36, b2 * 85))
+# Pre-build RGB565 pen lookup table.
+# Quantize to 4 bits per channel (12-bit color = 4096 entries).
+# This covers all visible colors with fast index computation.
+_pen_lut = []
+for _i in range(4096):
+    _r = ((_i >> 8) & 0x0F) * 17   # 0-255
+    _g = ((_i >> 4) & 0x0F) * 17   # 0-255
+    _b = (_i & 0x0F) * 17          # 0-255
+    _pen_lut.append(graphics.create_pen(_r, _g, _b))
 
-# Convert to tuple for faster indexing in viper
-pen_lut = tuple(pen_lut)
+
+@micropython.native
+def draw_frame(frame, lut):
+    """Draw RGB888 frame with 12-bit quantized LUT — native compiled."""
+    _set_pen = graphics.set_pen
+    _pixel = graphics.pixel
+    idx = 0
+    for y in range(32):
+        for x in range(32):
+            # Quantize RGB888 to 12-bit (4 bits per channel) for LUT index
+            key = ((frame[idx] & 0xF0) << 4) | (frame[idx + 1] & 0xF0) | (frame[idx + 2] >> 4)
+            _set_pen(lut[key])
+            _pixel(x, y)
+            idx += 3
 
 
 def show_startup():
-    """Show a brief startup pattern to confirm the board is running."""
+    """Gradient pattern to confirm the board is running."""
     graphics.set_pen(graphics.create_pen(0, 0, 0))
     graphics.clear()
     for i in range(WIDTH):
@@ -61,18 +71,6 @@ def show_startup():
     graphics.set_pen(graphics.create_pen(0, 0, 0))
     graphics.clear()
     i75.update()
-
-
-def read_exact(n):
-    """Read exactly n bytes from stdin, blocking until complete."""
-    buf = bytearray(n)
-    pos = 0
-    while pos < n:
-        chunk = sys.stdin.buffer.read(n - pos)
-        if chunk:
-            buf[pos:pos + len(chunk)] = chunk
-            pos += len(chunk)
-    return buf
 
 
 def send_ack():
@@ -88,21 +86,6 @@ def send_ack():
         pass
 
 
-def draw_frame(frame):
-    """Draw frame using RGB332 quantized LUT — no per-pixel dict lookup."""
-    idx = 0
-    for y in range(32):
-        for x in range(32):
-            r = frame[idx]
-            g = frame[idx + 1]
-            b = frame[idx + 2]
-            idx += 3
-            # Quantize to RGB332: 3 bits R, 3 bits G, 2 bits B
-            key = (r & 0xE0) | ((g >> 3) & 0x1C) | (b >> 6)
-            graphics.set_pen(pen_lut[key])
-            graphics.pixel(x, y)
-
-
 def show_waiting():
     """Red pixel in corner = waiting for serial data."""
     graphics.set_pen(graphics.create_pen(30, 0, 0))
@@ -114,11 +97,12 @@ def main():
     show_startup()
     show_waiting()
 
-    # Pre-allocate frame buffer to avoid repeated allocation
+    # Pre-allocate frame buffer
     frame = bytearray(FRAME_SIZE)
+    lut = _pen_lut
 
     while True:
-        # Wait for sync byte
+        # Wait for sync byte (only 0xFF — pixel data is capped at 0xFE)
         b = sys.stdin.buffer.read(1)
         if not b or b[0] != SYNC_BYTE:
             continue
@@ -132,7 +116,7 @@ def main():
                 pos += len(chunk)
 
         # Draw and update
-        draw_frame(frame)
+        draw_frame(frame, lut)
         i75.update()
 
         # ACK — ready for next frame

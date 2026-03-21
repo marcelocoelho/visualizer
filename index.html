@@ -90,7 +90,7 @@
 
 <script>
 const W = 32, H = 32;
-const FRAME_SIZE = W * H * 3;
+const FRAME_SIZE = W * H * 3;       // 3072 bytes RGB888
 const SYNC_BYTE = 0xFF;
 const ACK_BYTE = 0x06;
 
@@ -107,6 +107,9 @@ for (let i = 0; i < W * H; i++) {
 
 // Frame buffer: stores current frame as flat RGB array
 const frameBuffer = new Uint8Array(FRAME_SIZE);
+// Serial packet: sync byte + RGB888 pixels (pre-allocated)
+const serialPacket = new Uint8Array(1 + FRAME_SIZE);
+serialPacket[0] = SYNC_BYTE;
 
 function setPixel(x, y, r, g, b) {
   if (x < 0 || x >= W || y < 0 || y >= H) return;
@@ -227,18 +230,17 @@ async function sendFrame() {
   try {
     const brightness = brightnessSlider.value / 100;
 
-    // Build packet: sync byte + scaled frame data
-    const packet = new Uint8Array(1 + FRAME_SIZE);
-    packet[0] = SYNC_BYTE;
+    // Apply brightness and cap at 0xFE to avoid sync byte collision
     for (let i = 0; i < FRAME_SIZE; i++) {
-      packet[1 + i] = Math.floor(frameBuffer[i] * brightness);
+      const v = (frameBuffer[i] * brightness) | 0;
+      serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
     }
 
     waitingForAck = true;
     lastSendTime = performance.now();
-    await writer.write(packet);
+    await writer.write(serialPacket);
     framesSent++;
-    if (framesSent <= 3) console.log(`Frame #${framesSent} sent (${packet.length} bytes)`);
+    if (framesSent <= 3) console.log(`Frame #${framesSent} sent (${serialPacket.length} bytes)`);
 
     // Update FPS counter
     const now = performance.now();
