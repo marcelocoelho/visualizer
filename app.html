@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LED Visualizer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #111;
+  color: #ccc;
+  font-family: monospace;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 10px 16px 14px;
+  gap: 10px;
+  user-select: none;
+}
+
+/* ── Top bar (tabs + shared controls) ────────────────── */
+#top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 1100px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 7px 12px;
+  flex-wrap: wrap;
+}
+
+#brand {
+  color: #444;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding-right: 8px;
+  border-right: 1px solid #2a2a2a;
+}
+
+#tabs {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tab {
+  background: #202020;
+  border: 1px solid #333;
+  color: #888;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.tab:hover { background: #2a2a2a; color: #bbb; }
+.tab.active { background: #1e3a5e; border-color: #3a6a9a; color: #9cf; }
+
+#shared-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #555;
+  font-size: 11px;
+}
+
+#shared-controls input[type="number"] {
+  width: 42px;
+  background: #222;
+  border: 1px solid #333;
+  color: #ccc;
+  padding: 3px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  text-align: center;
+}
+
+#shared-controls input[type="range"] {
+  width: 80px;
+  accent-color: #555;
+  height: 3px;
+}
+
+#connect-btn {
+  background: #202020;
+  border: 1px solid #383838;
+  color: #aaa;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+#connect-btn:hover { background: #2a2a2a; }
+#connect-btn.connected { background: #1e2e1e; border-color: #2e5e2e; color: #7d7; }
+
+#serial-status {
+  font-size: 10px;
+  color: #3a3a3a;
+  min-width: 70px;
+}
+
+#fps-stats {
+  font-size: 10px;
+  color: #3a3a3a;
+  min-width: 55px;
+}
+
+/* ── Views ──────────────────────────────────────────── */
+.view { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.view[hidden] { display: none !important; }
+
+/* ── Animation view ─────────────────────────────────── */
+#anim-view {
+  padding-top: 10px;
+}
+
+#anim-name-label {
+  color: #555;
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+#anim-canvas {
+  image-rendering: pixelated;
+  border-radius: 12px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.8);
+  background: #000;
+  width: 512px;
+  height: 512px;
+}
+
+/* ── Editor toolbar ─────────────────────────────────── */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 7px 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.sep {
+  width: 1px;
+  height: 28px;
+  background: #2a2a2a;
+}
+
+.tool-label {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.icon-btn {
+  background: #202020;
+  border: 1px solid #333;
+  color: #888;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.icon-btn:hover { background: #2a2a2a; color: #bbb; }
+.icon-btn.active { background: #1e3a1e; border-color: #3a7a3a; color: #7d7; }
+
+#palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 256px;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+.swatch:hover { transform: scale(1.25); }
+.swatch.selected { border-color: #fff; }
+
+#color-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#active-color-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  border: 2px solid #444;
+  flex-shrink: 0;
+}
+
+input[type="color"] {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  flex-shrink: 0;
+}
+
+/* ── Editor main area ───────────────────────────────── */
+#editor-main {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+#canvas-wrap { position: relative; flex-shrink: 0; }
+
+#editor-canvas {
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+  cursor: crosshair;
+  width: 512px;
+  height: 512px;
+}
+
+#grid-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  border-radius: 6px;
+  width: 512px;
+  height: 512px;
+}
+
+#side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.card {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.card-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.full-btn {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 12px;
+  text-align: center;
+  transition: background 0.12s;
+}
+.play-btn {
+  background: #1e2e1e;
+  border: 1px solid #2e5e2e;
+  color: #7d7;
+}
+.play-btn:hover { background: #263a26; }
+.play-btn.active { background: #2a4a2a; border-color: #4a8a4a; }
+
+#cursor-info {
+  font-size: 10px;
+  color: #3a3a3a;
+  text-align: center;
+  min-height: 14px;
+}
+
+/* ── Timeline ───────────────────────────────────────── */
+#timeline-wrap {
+  width: 100%;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+#timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.tl-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.tl-btn {
+  background: #202020;
+  border: 1px solid #333;
+  color: #888;
+  padding: 3px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 11px;
+  transition: background 0.12s;
+}
+.tl-btn:hover { background: #2a2a2a; color: #bbb; }
+
+#frame-count {
+  margin-left: auto;
+  color: #3a3a3a;
+  font-size: 11px;
+}
+
+#frames-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+#frames-container {
+  display: flex;
+  gap: 5px;
+  min-height: 62px;
+  align-items: flex-end;
+}
+
+.frame-thumb {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.frame-thumb:hover { background: #222; }
+.frame-thumb canvas {
+  image-rendering: pixelated;
+  border: 1px solid #333;
+  border-radius: 3px;
+  display: block;
+}
+.frame-thumb.current canvas { border-color: #5a9a5a; box-shadow: 0 0 0 1px #3a7a3a; }
+
+.frame-num { font-size: 9px; color: #3a3a3a; }
+.frame-thumb.current .frame-num { color: #5a9a5a; }
+
+#save-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #222;
+  flex-wrap: wrap;
+}
+#save-row input[type="text"] {
+  flex: 0 0 180px;
+  background: #222;
+  border: 1px solid #333;
+  color: #ccc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  outline: none;
+}
+#save-row input[type="text"]:focus { border-color: #3a6a3a; }
+#anim-status, #anims-status {
+  font-size: 10px;
+  color: #3a3a3a;
+  margin-left: auto;
+}
+
+#frames-scroll::-webkit-scrollbar { height: 4px; }
+#frames-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
+#frames-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+#shortcuts {
+  font-size: 10px;
+  color: #2a2a2a;
+  align-self: flex-start;
+  line-height: 1.6;
+}
+
+/* ── Galleries (left column in editor) ──────────────── */
+#galleries-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.gallery-wrap {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gallery-header { display: flex; align-items: center; gap: 6px; }
+
+.gallery-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#gallery-status, #anims-status {
+  margin-left: auto;
+  font-size: 9px;
+  color: #3a3a3a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.gallery-actions .tl-btn { padding: 2px 6px; font-size: 10px; }
+
+.gallery-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 240px;
+  padding: 2px;
+  border-top: 1px solid #222;
+  padding-top: 6px;
+}
+.gallery-scroll::-webkit-scrollbar { width: 4px; }
+.gallery-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
+.gallery-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+#gallery-container, #anims-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 5px;
+}
+
+#gallery-empty, #anims-empty {
+  grid-column: 1 / -1;
+  color: #2a2a2a;
+  font-size: 10px;
+  padding: 6px 2px;
+  line-height: 1.4;
+}
+
+.gallery-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+  min-width: 0;
+}
+.gallery-item:hover { background: #222; border-color: #333; }
+.gallery-item.selected { border-color: #5a9a5a; background: #1a2a1a; }
+
+.gallery-item canvas { image-rendering: pixelated; border-radius: 3px; display: block; }
+
+.gallery-item-name {
+  font-size: 9px;
+  color: #3a3a3a;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.gallery-item.selected .gallery-item-name { color: #5a9a5a; }
+</style>
+</head>
+<body>
+
+<!-- Top bar: tabs + shared controls -->
+<div id="top-bar">
+  <span id="brand">LED VISUALIZER</span>
+  <div id="tabs"></div>
+  <div id="shared-controls">
+    <button id="connect-btn" onclick="toggleSerial()">⬡ Connect</button>
+    <span id="serial-status">disconnected</span>
+    <span class="ctrl-group">FPS <input type="number" id="fps-input" value="30" min="1" max="120"></span>
+    <span class="ctrl-group">Bright <input type="range" id="brightness" min="5" max="100" value="100"><span id="bright-val">100%</span></span>
+    <span id="fps-stats"></span>
+  </div>
+</div>
+
+<!-- Animation view -->
+<div id="anim-view" class="view" hidden>
+  <div id="anim-name-label">—</div>
+  <canvas id="anim-canvas" width="32" height="32"></canvas>
+</div>
+
+<!-- Editor view -->
+<div id="editor-view" class="view">
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <span class="tool-label">Tool</span>
+    <button class="icon-btn active" id="tool-pencil"     title="Pencil  [P]"    onclick="setTool('pencil')">✏</button>
+    <button class="icon-btn"        id="tool-eraser"     title="Eraser  [E]"    onclick="setTool('eraser')">◻</button>
+    <button class="icon-btn"        id="tool-fill"       title="Fill    [F]"    onclick="setTool('fill')">◈</button>
+    <button class="icon-btn"        id="tool-eyedropper" title="Pick    [K]"    onclick="setTool('eyedropper')">⊕</button>
+    <div class="sep"></div>
+    <div id="color-inputs">
+      <div id="active-color-box"></div>
+      <input type="color" id="color-picker" title="Custom color" value="#ff4400">
+    </div>
+    <div class="sep"></div>
+    <div id="palette"></div>
+    <div class="sep"></div>
+    <button class="icon-btn" title="Clear frame  [Del]"  onclick="clearFrame()">🗑</button>
+    <button class="icon-btn" title="Copy frame   [C]"    onclick="copyFrame()">⎘</button>
+    <button class="icon-btn" title="Paste frame  [V]"    onclick="pasteFrame()">⎙</button>
+    <div class="sep"></div>
+    <button class="icon-btn active" id="grid-btn" title="Toggle grid  [G]" onclick="toggleGrid()">⊞</button>
+    <div class="sep"></div>
+    <button class="full-btn play-btn" id="play-btn" onclick="togglePlay()" style="width:auto;padding:6px 16px;">▶ Play</button>
+  </div>
+
+  <!-- Main -->
+  <div id="editor-main">
+    <!-- Left galleries column -->
+    <div id="galleries-column">
+      <div class="gallery-wrap">
+        <div class="gallery-header">
+          <span class="gallery-title">Image Gallery</span>
+          <span id="gallery-status"></span>
+        </div>
+        <div class="gallery-actions">
+          <button class="tl-btn" onclick="openGalleryFolder()" title="Open a folder of PNGs">⊞ Folder</button>
+          <input type="file" id="gallery-file-input" accept="image/png,image/gif,image/jpeg,image/bmp,image/webp" multiple style="display:none" onchange="loadGalleryFiles(this.files)">
+          <button class="tl-btn" onclick="document.getElementById('gallery-file-input').click()" title="Pick individual image files">+ Files</button>
+          <button class="tl-btn" onclick="loadSelectedToFrame()" title="Load selected image into current frame" style="color:#7d7;border-color:#3a6a3a;">↓ Load</button>
+          <button class="tl-btn" onclick="loadSelectedAsNewFrame()" title="Load selected image as a new frame">+ Frame</button>
+          <button class="tl-btn" onclick="clearGallery()" title="Clear gallery">✕</button>
+        </div>
+        <div class="gallery-scroll">
+          <div id="gallery-container">
+            <div id="gallery-empty">Open a folder or add files to browse images</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="gallery-wrap">
+        <div class="gallery-header">
+          <span class="gallery-title">Saved Animations</span>
+          <span id="anims-status"></span>
+        </div>
+        <div class="gallery-actions">
+          <button class="tl-btn" onclick="refreshAnimationsGallery(true)" title="Refresh list">↻ Refresh</button>
+        </div>
+        <div class="gallery-scroll">
+          <div id="anims-container">
+            <div id="anims-empty">Pick a root folder to store and browse animations</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div id="canvas-wrap">
+      <canvas id="editor-canvas" width="512" height="512"></canvas>
+      <canvas id="grid-canvas"   width="512" height="512"></canvas>
+    </div>
+
+    <!-- Side panel -->
+    <div id="side-panel">
+      <div class="card" style="flex:1;">
+        <div class="card-title">Cursor</div>
+        <div id="cursor-info">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div id="timeline-wrap">
+    <div id="timeline-header">
+      <span class="tl-title">Timeline</span>
+      <button class="tl-btn" onclick="addFrame()"       title="Add blank frame after current">+ Add</button>
+      <button class="tl-btn" onclick="duplicateFrame()" title="Duplicate current frame">⧉ Dup</button>
+      <button class="tl-btn" onclick="deleteFrame()"    title="Delete current frame">✕ Del</button>
+      <button class="tl-btn" onclick="moveFrameLeft()"  title="Move frame left">← Mv</button>
+      <button class="tl-btn" onclick="moveFrameRight()" title="Move frame right">Mv →</button>
+      <span id="frame-count"></span>
+    </div>
+    <div id="frames-scroll">
+      <div id="frames-container"></div>
+    </div>
+    <div id="save-row">
+      <button class="tl-btn" onclick="newAnimation()" title="Start a new blank animation" style="color:#d9a;border-color:#6a3a6a;">✨ New</button>
+      <span class="tl-title">Save As</span>
+      <input type="text" id="anim-name" placeholder="animation name" autocomplete="off">
+      <button class="tl-btn" onclick="saveAnimation()" title="Save all frames to a folder" style="color:#7d7;border-color:#3a6a3a;">💾 Save</button>
+      <button class="tl-btn" onclick="pickAnimationsRoot()" title="Choose the folder where animations are stored">⊞ Root…</button>
+      <span id="anim-status"></span>
+    </div>
+  </div>
+
+  <div id="shortcuts">
+    P pencil · E eraser · F fill · K eyedropper · G grid · C copy · V paste · Del clear · ← → prev/next frame · Space play
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// SHARED CONSTANTS
+// ══════════════════════════════════════════════════════════════
+const W = 32, H = 32;
+const PIXELS = W * H;
+const FRAME_BYTES = PIXELS * 3;
+const SYNC_BYTE = 0xFF;
+
+// ══════════════════════════════════════════════════════════════
+// SHARED SERIAL  (used by animations AND editor)
+// ══════════════════════════════════════════════════════════════
+let port = null, writer = null, serialConnected = false, serialBusy = false;
+let framesSent = 0, lastFpsTime = performance.now();
+
+const serialPacket = new Uint8Array(1 + FRAME_BYTES);
+serialPacket[0] = SYNC_BYTE;
+
+const connectBtn   = document.getElementById('connect-btn');
+const serialStatus = document.getElementById('serial-status');
+const brightnessEl = document.getElementById('brightness');
+const brightValEl  = document.getElementById('bright-val');
+const fpsInputEl   = document.getElementById('fps-input');
+const fpsStatsEl   = document.getElementById('fps-stats');
+
+brightnessEl.addEventListener('input', () => {
+  brightValEl.textContent = brightnessEl.value + '%';
+});
+
+async function toggleSerial() {
+  if (serialConnected) await disconnectSerial();
+  else await connectSerial();
+}
+
+async function connectSerial() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 1500000 });
+    writer = port.writable.getWriter();
+    serialConnected = true;
+    connectBtn.textContent = '⬡ Disconnect';
+    connectBtn.classList.add('connected');
+    serialStatus.textContent = 'connected';
+    serialStatus.style.color = '#5a9a5a';
+  } catch (e) {
+    serialStatus.textContent = e.message;
+    serialStatus.style.color = '#9a5a5a';
+  }
+}
+
+async function disconnectSerial() {
+  serialConnected = false;
+  try {
+    if (writer) { writer.releaseLock(); writer = null; }
+    if (port)   { await port.close();   port   = null; }
+  } catch (_) {}
+  connectBtn.textContent = '⬡ Connect';
+  connectBtn.classList.remove('connected');
+  serialStatus.textContent = 'disconnected';
+  serialStatus.style.color = '#3a3a3a';
+  fpsStatsEl.textContent = '';
+}
+
+function sendFrame(frame) {
+  if (!serialConnected || !writer || serialBusy) return;
+  serialBusy = true;
+  const bright = brightnessEl.value / 100;
+  if (bright >= 1) {
+    for (let i = 0; i < FRAME_BYTES; i++) {
+      serialPacket[1 + i] = frame[i] >= 0xFF ? 0xFE : frame[i];
+    }
+  } else {
+    for (let i = 0; i < FRAME_BYTES; i++) {
+      const v = (frame[i] * bright) | 0;
+      serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
+    }
+  }
+  writer.write(serialPacket)
+    .then(() => { serialBusy = false; framesSent++; })
+    .catch(() => { serialBusy = false; disconnectSerial(); });
+  const now = performance.now();
+  if (now - lastFpsTime > 1000) {
+    fpsStatsEl.textContent = `${Math.round(framesSent / ((now - lastFpsTime)/1000))} fps`;
+    framesSent = 0;
+    lastFpsTime = now;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// TABS & MAIN LOOP
+// ══════════════════════════════════════════════════════════════
+let currentTab = 'editor';              // 'editor' | 'anim:<name>'
+let animStartTime = performance.now();  // for animation t
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  const isAnim = tab.startsWith('anim:');
+  document.getElementById('editor-view').hidden = isAnim;
+  document.getElementById('anim-view').hidden   = !isAnim;
+
+  if (isAnim) {
+    const name = tab.slice(5);
+    const anim = animations[name];
+    if (anim && anim.init) anim.init();
+    animStartTime = performance.now();
+    document.getElementById('anim-name-label').textContent = name;
+  }
+}
+
+// Main render loop — throttled to shared FPS target
+let lastRenderTime = 0;
+
+function mainLoop(now) {
+  requestAnimationFrame(mainLoop);
+  const fps = Math.max(1, parseInt(fpsInputEl.value) || 30);
+  const interval = 1000 / fps;
+  if (now - lastRenderTime < interval) return;
+  lastRenderTime = now;
+
+  if (currentTab.startsWith('anim:')) {
+    const name = currentTab.slice(5);
+    const anim = animations[name];
+    if (anim) {
+      // t advances as if 60 fps (0.03/frame), scaled by wall-clock
+      const t = (now - animStartTime) * 0.0018;
+      anim.draw(t);
+      flushAnimCanvas();
+      if (serialConnected) sendFrame(animFrameBuffer);
+    }
+  } else if (currentTab === 'editor') {
+    if (isPlaying) {
+      currentFrame = (currentFrame + 1) % frames.length;
+      renderFrame(currentFrame);
+      rebuildTimeline();
+      if (serialConnected) sendFrame(frames[currentFrame]);
+    }
+  }
+}
+requestAnimationFrame(mainLoop);
+
+// ══════════════════════════════════════════════════════════════
+// ANIMATION ENGINE  (from index.html)
+// ══════════════════════════════════════════════════════════════
+const animCanvas   = document.getElementById('anim-canvas');
+const animCtx      = animCanvas.getContext('2d');
+const animImgData  = animCtx.createImageData(W, H);
+const animImgBuf   = animImgData.data;
+const animFrameBuffer = new Uint8Array(FRAME_BYTES);
+
+function setPixel(x, y, r, g, b) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  const bi = (y * W + x) * 3;
+  animFrameBuffer[bi] = r;
+  animFrameBuffer[bi + 1] = g;
+  animFrameBuffer[bi + 2] = b;
+}
+
+function addPixel(x, y, r, g, b) {
+  const bi = (y * W + x) * 3;
+  const nr = animFrameBuffer[bi] + r;
+  const ng = animFrameBuffer[bi + 1] + g;
+  const nb = animFrameBuffer[bi + 2] + b;
+  animFrameBuffer[bi]     = nr > 255 ? 255 : nr;
+  animFrameBuffer[bi + 1] = ng > 255 ? 255 : ng;
+  animFrameBuffer[bi + 2] = nb > 255 ? 255 : nb;
+}
+
+function flushAnimCanvas() {
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    animImgBuf[j]     = animFrameBuffer[i];
+    animImgBuf[j + 1] = animFrameBuffer[i + 1];
+    animImgBuf[j + 2] = animFrameBuffer[i + 2];
+    animImgBuf[j + 3] = 255;
+  }
+  animCtx.putImageData(animImgData, 0, 0);
+}
+
+const animations = {};
+
+// --- 1. Orbiting Particles ---
+animations['Particles'] = (() => {
+  const NUM = 12;
+  const particles = [];
+  const shootingStars = [];
+  function init() {
+    particles.length = 0; shootingStars.length = 0;
+    for (let i = 0; i < NUM; i++) {
+      particles.push({
+        cx: 16, cy: 16,
+        rx: 4 + Math.random() * 11, ry: 4 + Math.random() * 11,
+        speed: 0.3 + Math.random() * 0.8, phase: Math.random() * Math.PI * 2,
+        r: 80 + Math.random() * 175 | 0, g: 80 + Math.random() * 175 | 0, b: 80 + Math.random() * 175 | 0,
+        size: 1.5 + Math.random() * 1.5, trail: [], trailLen: 4 + (Math.random() * 6 | 0),
+      });
+    }
+  }
+  function draw(t) {
+    animFrameBuffer.fill(0);
+    if (Math.random() < 0.02) {
+      const edge = Math.random() * 4 | 0;
+      let sx, sy, vx, vy;
+      if (edge === 0) { sx = -1; sy = Math.random() * H; vx = 1.5 + Math.random(); vy = (Math.random() - 0.5) * 0.8; }
+      else if (edge === 1) { sx = W; sy = Math.random() * H; vx = -(1.5 + Math.random()); vy = (Math.random() - 0.5) * 0.8; }
+      else if (edge === 2) { sx = Math.random() * W; sy = -1; vx = (Math.random() - 0.5) * 0.8; vy = 1.5 + Math.random(); }
+      else { sx = Math.random() * W; sy = H; vx = (Math.random() - 0.5) * 0.8; vy = -(1.5 + Math.random()); }
+      shootingStars.push({ x: sx, y: sy, vx, vy, life: 1.0 });
+    }
+    for (let i = shootingStars.length - 1; i >= 0; i--) {
+      const s = shootingStars[i];
+      s.x += s.vx; s.y += s.vy; s.life -= 0.03;
+      if (s.life <= 0 || s.x < -2 || s.x > W + 2 || s.y < -2 || s.y > H + 2) { shootingStars.splice(i, 1); continue; }
+      for (let j = 0; j < 4; j++) {
+        const tx = Math.round(s.x - s.vx * j * 0.4), ty = Math.round(s.y - s.vy * j * 0.4);
+        const fade = s.life * (1 - j * 0.25);
+        if (tx >= 0 && tx < W && ty >= 0 && ty < H) addPixel(tx, ty, (255 * fade) | 0, (255 * fade) | 0, (200 * fade) | 0);
+      }
+    }
+    for (const p of particles) {
+      const angle = t * p.speed + p.phase;
+      const wobble = Math.sin(t * 0.7 + p.phase * 2) * 3;
+      const x = p.cx + Math.cos(angle) * (p.rx + wobble);
+      const y = p.cy + Math.sin(angle) * (p.ry + wobble * 0.5);
+      p.trail.unshift({ x, y });
+      if (p.trail.length > p.trailLen) p.trail.pop();
+      for (let i = p.trail.length - 1; i >= 0; i--) {
+        const fade = (1 - i / p.trailLen) * 0.4;
+        const tx = Math.round(p.trail[i].x), ty = Math.round(p.trail[i].y);
+        if (tx >= 0 && tx < W && ty >= 0 && ty < H) addPixel(tx, ty, (p.r * fade) | 0, (p.g * fade) | 0, (p.b * fade) | 0);
+      }
+      const px = Math.round(x), py = Math.round(y), radius = Math.ceil(p.size);
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d <= p.size) {
+            const br = 1 - d / (p.size + 0.5);
+            const sx = px + dx, sy = py + dy;
+            if (sx >= 0 && sx < W && sy >= 0 && sy < H) addPixel(sx, sy, (p.r * br) | 0, (p.g * br) | 0, (p.b * br) | 0);
+          }
+        }
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 2. Plasma ---
+animations['Plasma'] = (() => {
+  function init() {}
+  function draw(t) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const v1 = Math.sin(x * 0.3 + t * 2);
+        const v2 = Math.sin(y * 0.3 + t * 1.5);
+        const v3 = Math.sin((x + y) * 0.2 + t);
+        const v4 = Math.sin(Math.sqrt(((x - 16) * (x - 16) + (y - 16) * (y - 16))) * 0.3 - t * 2);
+        const v = (v1 + v2 + v3 + v4) / 4;
+        const r = (Math.sin(v * Math.PI + t) * 0.5 + 0.5) * 255 | 0;
+        const g = (Math.sin(v * Math.PI + t + 2.094) * 0.5 + 0.5) * 255 | 0;
+        const b = (Math.sin(v * Math.PI + t + 4.189) * 0.5 + 0.5) * 255 | 0;
+        setPixel(x, y, r, g, b);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 3. Rainbow Wave ---
+animations['Rainbow Wave'] = (() => {
+  function init() {}
+  function draw(t) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const hue = ((x + y) * 8 + t * 80) % 360;
+        const s = 1, l = 0.5;
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const X = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        const m = l - c / 2;
+        let r, g, b;
+        if (hue < 60) { r = c; g = X; b = 0; }
+        else if (hue < 120) { r = X; g = c; b = 0; }
+        else if (hue < 180) { r = 0; g = c; b = X; }
+        else if (hue < 240) { r = 0; g = X; b = c; }
+        else if (hue < 300) { r = X; g = 0; b = c; }
+        else { r = c; g = 0; b = X; }
+        setPixel(x, y, ((r + m) * 255) | 0, ((g + m) * 255) | 0, ((b + m) * 255) | 0);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 4. Gradient ---
+animations['Gradient'] = (() => {
+  function hsl2rgb(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const X = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = l - c / 2;
+    let r, g, b;
+    if (h < 60) { r = c; g = X; b = 0; }
+    else if (h < 120) { r = X; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = X; }
+    else if (h < 240) { r = 0; g = X; b = c; }
+    else if (h < 300) { r = X; g = 0; b = c; }
+    else { r = c; g = 0; b = X; }
+    return [((r + m) * 255) | 0, ((g + m) * 255) | 0, ((b + m) * 255) | 0];
+  }
+  function init() {}
+  function draw(t) {
+    const hueA = (t * 25) % 360;
+    const hueB = (t * 25 + 150) % 360;
+    const [rA, gA, bA] = hsl2rgb(hueA, 1, 0.5);
+    const [rB, gB, bB] = hsl2rgb(hueB, 1, 0.5);
+    const angle = t * 0.4;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const proj = ((x - 16) * dx + (y - 16) * dy) / 22;
+        const f = proj * 0.5 + 0.5;
+        const r = (rA + (rB - rA) * f) | 0;
+        const g = (gA + (gB - gA) * f) | 0;
+        const b = (bA + (bB - bA) * f) | 0;
+        setPixel(x, y, Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b)));
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 5. Fire ---
+animations['Fire'] = (() => {
+  const buf = new Float32Array(W * (H + 2));
+  function init() { buf.fill(0); }
+  function draw(t) {
+    for (let x = 0; x < W; x++) {
+      buf[(H + 1) * W + x] = Math.random() * 1.5;
+      buf[H * W + x] = Math.random() * 1.2;
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const xl = x > 0 ? x - 1 : W - 1;
+        const xr = x < W - 1 ? x + 1 : 0;
+        const heat = (buf[(y + 1) * W + xl] + buf[(y + 1) * W + x] * 2 + buf[(y + 1) * W + xr] + buf[(y + 2) * W + x]) / 5.8;
+        buf[y * W + x] = Math.max(0, heat - 0.01);
+      }
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const h = buf[y * W + x];
+        const r = Math.min(255, h * 400) | 0;
+        const g = Math.min(255, Math.max(0, (h - 0.3) * 500)) | 0;
+        const b = Math.min(255, Math.max(0, (h - 0.7) * 600)) | 0;
+        setPixel(x, y, r, g, b);
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 6. Matrix Rain ---
+animations['Matrix Rain'] = (() => {
+  const drops = [];
+  function init() {
+    drops.length = 0;
+    for (let x = 0; x < W; x++) {
+      drops.push({ x, y: Math.random() * -H, speed: 0.3 + Math.random() * 0.7, len: 4 + (Math.random() * 10 | 0) });
+    }
+  }
+  function draw(t) {
+    animFrameBuffer.fill(0);
+    for (const d of drops) {
+      d.y += d.speed;
+      if (d.y - d.len > H) { d.y = Math.random() * -8; d.speed = 0.3 + Math.random() * 0.7; d.len = 4 + (Math.random() * 10 | 0); }
+      for (let i = 0; i < d.len; i++) {
+        const py = Math.round(d.y - i);
+        if (py >= 0 && py < H) {
+          const fade = 1 - i / d.len;
+          if (i === 0) setPixel(d.x, py, 180, 255, 180);
+          else addPixel(d.x, py, 0, (180 * fade * fade) | 0, 0);
+        }
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 7. Game of Life ---
+animations['Game of Life'] = (() => {
+  let grid = new Uint8Array(W * H);
+  let next = new Uint8Array(W * H);
+  let staleCount = 0, lastHash = 0;
+  function init() {
+    for (let i = 0; i < W * H; i++) grid[i] = Math.random() < 0.3 ? 1 : 0;
+    staleCount = 0; lastHash = 0;
+  }
+  function draw(t) {
+    let hash = 0;
+    for (let i = 0; i < W * H; i++) hash = (hash * 31 + grid[i]) | 0;
+    if (hash === lastHash) staleCount++; else staleCount = 0;
+    lastHash = hash;
+    if (staleCount > 30) init();
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = (x + dx + W) % W, ny = (y + dy + H) % H;
+            n += grid[ny * W + nx];
+          }
+        }
+        const alive = grid[y * W + x];
+        next[y * W + x] = (alive && (n === 2 || n === 3)) || (!alive && n === 3) ? 1 : 0;
+      }
+    }
+    [grid, next] = [next, grid];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (grid[y * W + x]) {
+          const hue = ((x * 11 + y * 7) * 3) % 360;
+          const c = 1, X = c * (1 - Math.abs((hue / 60) % 2 - 1));
+          let r, g, b;
+          if (hue < 60) { r = c; g = X; b = 0; }
+          else if (hue < 120) { r = X; g = c; b = 0; }
+          else if (hue < 180) { r = 0; g = c; b = X; }
+          else if (hue < 240) { r = 0; g = X; b = c; }
+          else if (hue < 300) { r = X; g = 0; b = c; }
+          else { r = c; g = 0; b = X; }
+          setPixel(x, y, (r * 200) | 0, (g * 200) | 0, (b * 200) | 0);
+        } else {
+          setPixel(x, y, 0, 0, 0);
+        }
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 8. Starfield ---
+animations['Starfield'] = (() => {
+  const NUM = 80;
+  const stars = [];
+  function init() {
+    stars.length = 0;
+    for (let i = 0; i < NUM; i++) {
+      stars.push({ x: (Math.random() - 0.5) * 64, y: (Math.random() - 0.5) * 64, z: Math.random() * 32 });
+    }
+  }
+  function draw(t) {
+    animFrameBuffer.fill(0);
+    for (const s of stars) {
+      s.z -= 0.3;
+      if (s.z <= 0.1) { s.x = (Math.random() - 0.5) * 64; s.y = (Math.random() - 0.5) * 64; s.z = 32; }
+      const sx = (s.x / s.z) * 16 + 16;
+      const sy = (s.y / s.z) * 16 + 16;
+      const br = Math.min(255, (1 - s.z / 32) * 300) | 0;
+      const px = Math.round(sx), py = Math.round(sy);
+      if (px >= 0 && px < W && py >= 0 && py < H) addPixel(px, py, br, br, br);
+    }
+  }
+  return { init, draw };
+})();
+
+// --- 9. Ripples ---
+animations['Ripples'] = (() => {
+  const ripples = [];
+  let lastSpawn = 0;
+  function init() { ripples.length = 0; lastSpawn = 0; }
+  function draw(t) {
+    animFrameBuffer.fill(0);
+    if (t - lastSpawn > 1.5) {
+      ripples.push({ cx: 4 + Math.random() * 24, cy: 4 + Math.random() * 24, t: t, hue: Math.random() * 360 });
+      lastSpawn = t;
+      if (ripples.length > 6) ripples.shift();
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let val = 0;
+        for (const rip of ripples) {
+          const d = Math.sqrt((x - rip.cx) ** 2 + (y - rip.cy) ** 2);
+          const age = t - rip.t;
+          const wave = Math.sin(d * 1.5 - age * 6) * Math.max(0, 1 - age * 0.3) * Math.max(0, 1 - d * 0.05);
+          val += wave;
+        }
+        const br = Math.max(0, val);
+        const hue = (ripples.length > 0 ? ripples[ripples.length - 1].hue : 200);
+        const r = (br * (1 + Math.sin(hue * 0.0174)) * 80) | 0;
+        const g = (br * (1 + Math.sin((hue + 120) * 0.0174)) * 80) | 0;
+        const b = (br * (1 + Math.sin((hue + 240) * 0.0174)) * 80) | 0;
+        setPixel(x, y, Math.min(255, r), Math.min(255, g), Math.min(255, b));
+      }
+    }
+  }
+  return { init, draw };
+})();
+
+// ══════════════════════════════════════════════════════════════
+// TAB BUILDER
+// ══════════════════════════════════════════════════════════════
+const tabsEl = document.getElementById('tabs');
+function buildTabs() {
+  const editorTab = document.createElement('button');
+  editorTab.className = 'tab active';
+  editorTab.dataset.tab = 'editor';
+  editorTab.textContent = '✏ Editor';
+  editorTab.onclick = () => switchTab('editor');
+  tabsEl.appendChild(editorTab);
+  for (const name of Object.keys(animations)) {
+    const b = document.createElement('button');
+    b.className = 'tab';
+    b.dataset.tab = 'anim:' + name;
+    b.textContent = name;
+    b.onclick = () => switchTab('anim:' + name);
+    tabsEl.appendChild(b);
+  }
+}
+buildTabs();
+
+// ══════════════════════════════════════════════════════════════
+// EDITOR
+// ══════════════════════════════════════════════════════════════
+let frames       = [new Uint8Array(FRAME_BYTES)];
+let currentFrame = 0;
+let currentTool  = 'pencil';
+let activeColor  = { r: 255, g: 68, b: 0 };
+let showGrid     = true;
+let isPlaying    = false;
+let clipboard    = null;
+let isPainting   = false;
+let lastPainted  = { x: -1, y: -1 };
+
+const editorCanvas = document.getElementById('editor-canvas');
+const editorCtx    = editorCanvas.getContext('2d');
+const gridCanvas   = document.getElementById('grid-canvas');
+const gridCtx      = gridCanvas.getContext('2d');
+const CELL = 16;
+
+const offscreen    = document.createElement('canvas');
+offscreen.width = W; offscreen.height = H;
+const offCtx       = offscreen.getContext('2d');
+const editorImgData = offCtx.createImageData(W, H);
+
+const PALETTE = [
+  '#000000','#111111','#222222','#444444','#777777','#aaaaaa','#dddddd','#ffffff',
+  '#ff0000','#ff5500','#ff9900','#ffcc00','#ffff00','#aaff00',
+  '#00ff00','#00ff88','#00ffcc','#00ffff','#00aaff','#0055ff',
+  '#0000ff','#5500ff','#aa00ff','#ff00ff','#ff00aa','#ff0055',
+  '#ff8888','#88ff88','#8888ff','#ffcc88','#88ccff','#cc88ff',
+  '#883300','#336600','#003366','#660033',
+];
+
+function hexToRgb(hex) {
+  return { r: parseInt(hex.slice(1,3), 16), g: parseInt(hex.slice(3,5), 16), b: parseInt(hex.slice(5,7), 16) };
+}
+function rgbToHex(r, g, b) {
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function buildPalette() {
+  const el = document.getElementById('palette');
+  PALETTE.forEach(hex => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.style.background = hex;
+    s.title = hex;
+    s.onclick = () => selectColor(hexToRgb(hex), true);
+    el.appendChild(s);
+  });
+}
+
+function selectColor(rgb, fromPalette = false) {
+  activeColor = rgb;
+  const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+  document.getElementById('active-color-box').style.background = hex;
+  if (!fromPalette) document.getElementById('color-picker').value = hex;
+  document.querySelectorAll('.swatch').forEach(s => {
+    s.classList.toggle('selected', s.style.background === `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
+  });
+}
+
+document.getElementById('color-picker').addEventListener('input', e => {
+  selectColor(hexToRgb(e.target.value), false);
+});
+
+function setTool(tool) {
+  currentTool = tool;
+  ['pencil','eraser','fill','eyedropper'].forEach(t => {
+    document.getElementById('tool-' + t).classList.toggle('active', t === tool);
+  });
+  editorCanvas.style.cursor = tool === 'fill' ? 'cell' : 'crosshair';
+}
+
+function setEditorPixel(buf, x, y, r, g, b) {
+  const i = (y * W + x) * 3;
+  buf[i] = r; buf[i+1] = g; buf[i+2] = b;
+}
+function getEditorPixel(buf, x, y) {
+  const i = (y * W + x) * 3;
+  return { r: buf[i], g: buf[i+1], b: buf[i+2] };
+}
+function floodFill(buf, x, y, nr, ng, nb) {
+  const orig = getEditorPixel(buf, x, y);
+  if (orig.r === nr && orig.g === ng && orig.b === nb) return;
+  const stack = [[x, y]];
+  const seen  = new Uint8Array(PIXELS);
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+    const idx = cy * W + cx;
+    if (seen[idx]) continue;
+    const p = getEditorPixel(buf, cx, cy);
+    if (p.r !== orig.r || p.g !== orig.g || p.b !== orig.b) continue;
+    seen[idx] = 1;
+    setEditorPixel(buf, cx, cy, nr, ng, nb);
+    stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+  }
+}
+
+function renderFrame(idx) {
+  const buf = frames[idx];
+  const d   = editorImgData.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = buf[i]; d[j+1] = buf[i+1]; d[j+2] = buf[i+2]; d[j+3] = 255;
+  }
+  offCtx.putImageData(editorImgData, 0, 0);
+  editorCtx.imageSmoothingEnabled = false;
+  editorCtx.drawImage(offscreen, 0, 0, 512, 512);
+}
+
+function renderGrid() {
+  gridCtx.clearRect(0, 0, 512, 512);
+  if (!showGrid) return;
+  gridCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+  gridCtx.lineWidth = 0.5;
+  for (let i = 0; i <= W; i++) {
+    gridCtx.beginPath(); gridCtx.moveTo(i*CELL, 0);   gridCtx.lineTo(i*CELL, 512); gridCtx.stroke();
+    gridCtx.beginPath(); gridCtx.moveTo(0, i*CELL);   gridCtx.lineTo(512, i*CELL); gridCtx.stroke();
+  }
+}
+
+function renderThumb(frame, canvas) {
+  const ctx = canvas.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = frame[i]; d[j+1] = frame[i+1]; d[j+2] = frame[i+2]; d[j+3] = 255;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+function rebuildTimeline() {
+  const container = document.getElementById('frames-container');
+  container.innerHTML = '';
+  frames.forEach((frame, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'frame-thumb' + (i === currentFrame ? ' current' : '');
+    wrap.title = `Frame ${i+1}`;
+    wrap.onclick = () => selectFrame(i);
+    const cv = document.createElement('canvas');
+    cv.width = 48; cv.height = 48;
+    renderThumb(frame, cv);
+    const num = document.createElement('div');
+    num.className = 'frame-num';
+    num.textContent = i + 1;
+    wrap.appendChild(cv);
+    wrap.appendChild(num);
+    container.appendChild(wrap);
+  });
+  document.getElementById('frame-count').textContent = `Frame ${currentFrame + 1} / ${frames.length}`;
+  const thumbs = container.querySelectorAll('.frame-thumb');
+  if (thumbs[currentFrame]) thumbs[currentFrame].scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
+}
+
+function updateCurrentThumb() {
+  const thumbs = document.querySelectorAll('.frame-thumb');
+  if (thumbs[currentFrame]) renderThumb(frames[currentFrame], thumbs[currentFrame].querySelector('canvas'));
+}
+
+function selectFrame(idx) {
+  currentFrame = idx;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+  maybeSendToMatrix();
+}
+
+function addFrame() {
+  frames.splice(currentFrame + 1, 0, new Uint8Array(FRAME_BYTES));
+  currentFrame++; rebuildTimeline(); renderFrame(currentFrame);
+}
+function duplicateFrame() {
+  frames.splice(currentFrame + 1, 0, new Uint8Array(frames[currentFrame]));
+  currentFrame++; rebuildTimeline(); renderFrame(currentFrame);
+}
+function deleteFrame() {
+  if (frames.length === 1) { clearFrame(); return; }
+  frames.splice(currentFrame, 1);
+  if (currentFrame >= frames.length) currentFrame = frames.length - 1;
+  rebuildTimeline(); renderFrame(currentFrame);
+}
+function clearFrame() {
+  frames[currentFrame].fill(0);
+  renderFrame(currentFrame); updateCurrentThumb(); maybeSendToMatrix();
+}
+function copyFrame()  { clipboard = new Uint8Array(frames[currentFrame]); }
+function pasteFrame() {
+  if (!clipboard) return;
+  frames[currentFrame].set(clipboard);
+  renderFrame(currentFrame); updateCurrentThumb(); maybeSendToMatrix();
+}
+function moveFrameLeft() {
+  if (currentFrame === 0) return;
+  [frames[currentFrame - 1], frames[currentFrame]] = [frames[currentFrame], frames[currentFrame - 1]];
+  currentFrame--; rebuildTimeline();
+}
+function moveFrameRight() {
+  if (currentFrame === frames.length - 1) return;
+  [frames[currentFrame + 1], frames[currentFrame]] = [frames[currentFrame], frames[currentFrame + 1]];
+  currentFrame++; rebuildTimeline();
+}
+function toggleGrid() {
+  showGrid = !showGrid;
+  document.getElementById('grid-btn').classList.toggle('active', showGrid);
+  renderGrid();
+}
+
+function canvasXY(e) {
+  const rect = editorCanvas.getBoundingClientRect();
+  const sx = editorCanvas.width / rect.width;
+  const sy = editorCanvas.height / rect.height;
+  return {
+    x: Math.max(0, Math.min(W-1, Math.floor((e.clientX - rect.left) * sx / CELL))),
+    y: Math.max(0, Math.min(H-1, Math.floor((e.clientY - rect.top)  * sy / CELL))),
+  };
+}
+
+function applyTool(x, y) {
+  const buf = frames[currentFrame];
+  switch (currentTool) {
+    case 'pencil': setEditorPixel(buf, x, y, activeColor.r, activeColor.g, activeColor.b); break;
+    case 'eraser': setEditorPixel(buf, x, y, 0, 0, 0); break;
+    case 'fill':   floodFill(buf, x, y, activeColor.r, activeColor.g, activeColor.b); isPainting = false; break;
+    case 'eyedropper': { const p = getEditorPixel(buf, x, y); selectColor(p); setTool('pencil'); return; }
+  }
+  renderFrame(currentFrame); updateCurrentThumb(); maybeSendToMatrix();
+}
+
+editorCanvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  isPainting = true;
+  const { x, y } = canvasXY(e);
+  lastPainted = { x, y };
+  applyTool(x, y);
+});
+editorCanvas.addEventListener('mousemove', e => {
+  const { x, y } = canvasXY(e);
+  document.getElementById('cursor-info').textContent = `x ${x}  y ${y}`;
+  if (!isPainting || currentTool === 'fill' || currentTool === 'eyedropper') return;
+  if (x === lastPainted.x && y === lastPainted.y) return;
+  lastPainted = { x, y };
+  applyTool(x, y);
+});
+editorCanvas.addEventListener('mouseleave', () => { document.getElementById('cursor-info').textContent = '—'; });
+window.addEventListener('mouseup', () => { isPainting = false; });
+editorCanvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function togglePlay() {
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('play-btn');
+  if (isPlaying) { btn.textContent = '⏸ Pause'; btn.classList.add('active'); }
+  else           { btn.textContent = '▶ Play';  btn.classList.remove('active'); }
+}
+
+function maybeSendToMatrix() {
+  if (serialConnected && !isPlaying && currentTab === 'editor') sendFrame(frames[currentFrame]);
+}
+
+// ── Keyboard shortcuts (editor only) ────────────────────────
+window.addEventListener('keydown', e => {
+  if (currentTab !== 'editor') return;
+  if (e.target.tagName === 'INPUT') return;
+  switch (e.key) {
+    case 'p': case 'P': setTool('pencil');      break;
+    case 'e': case 'E': setTool('eraser');      break;
+    case 'f': case 'F': setTool('fill');        break;
+    case 'k': case 'K': setTool('eyedropper'); break;
+    case 'g': case 'G': toggleGrid();           break;
+    case 'c': case 'C': if (!e.ctrlKey && !e.metaKey) copyFrame();  break;
+    case 'v': case 'V': if (!e.ctrlKey && !e.metaKey) pasteFrame(); break;
+    case 'Delete': case 'Backspace': clearFrame(); break;
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'ArrowLeft':  if (currentFrame > 0) selectFrame(currentFrame - 1); break;
+    case 'ArrowRight': if (currentFrame < frames.length - 1) selectFrame(currentFrame + 1); break;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// IMAGE GALLERY
+// ══════════════════════════════════════════════════════════════
+let galleryItems = [];
+let selectedGalleryIdx = -1;
+
+async function openGalleryFolder() {
+  if (!window.showDirectoryPicker) { document.getElementById('gallery-file-input').click(); return; }
+  try {
+    const dir = await window.showDirectoryPicker({ mode: 'read' });
+    const files = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && /\.(png|jpg|jpeg|gif|bmp|webp)$/i.test(entry.name)) files.push(await entry.getFile());
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    await addFilesToGallery(files);
+  } catch (e) { if (e.name !== 'AbortError') console.error(e); }
+}
+
+async function loadGalleryFiles(fileList) {
+  const files = Array.from(fileList).sort((a, b) => a.name.localeCompare(b.name));
+  await addFilesToGallery(files);
+}
+
+async function addFilesToGallery(files) {
+  const statusEl = document.getElementById('gallery-status');
+  statusEl.textContent = `Loading ${files.length}…`;
+  for (const file of files) {
+    const data = await fileToFrame(file);
+    if (!data) continue;
+    const thumb = makeThumbCanvas(data, 60, 60);
+    galleryItems.push({ name: file.name.replace(/\.[^.]+$/, ''), data, thumb });
+  }
+  rebuildGallery();
+  statusEl.textContent = `${galleryItems.length} image(s)`;
+}
+
+function fileToFrame(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const tmp = document.createElement('canvas');
+      tmp.width = W; tmp.height = H;
+      const ctx = tmp.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, W, H);
+      const id  = ctx.getImageData(0, 0, W, H);
+      const buf = new Uint8Array(FRAME_BYTES);
+      for (let i = 0, j = 0; i < PIXELS; i++, j += 4) {
+        buf[i * 3] = id.data[j]; buf[i * 3 + 1] = id.data[j + 1]; buf[i * 3 + 2] = id.data[j + 2];
+      }
+      URL.revokeObjectURL(url); resolve(buf);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+function makeThumbCanvas(data, w, h) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const id = ctx.createImageData(W, H);
+  const d = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = data[i]; d[j+1] = data[i+1]; d[j+2] = data[i+2]; d[j+3] = 255;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, w, h);
+  return cv;
+}
+
+function rebuildGallery() {
+  const container = document.getElementById('gallery-container');
+  const empty = document.getElementById('gallery-empty');
+  container.innerHTML = '';
+  if (galleryItems.length === 0) { container.appendChild(empty); empty.style.display = ''; return; }
+  empty.style.display = 'none';
+  galleryItems.forEach((item, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-item' + (i === selectedGalleryIdx ? ' selected' : '');
+    wrap.title = item.name;
+    wrap.onclick = () => selectGalleryItem(i);
+    wrap.ondblclick = () => { selectGalleryItem(i); loadSelectedToFrame(); };
+    const cv = item.thumb.cloneNode();
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(item.thumb, 0, 0);
+    const label = document.createElement('div');
+    label.className = 'gallery-item-name';
+    label.textContent = item.name;
+    wrap.appendChild(cv); wrap.appendChild(label);
+    container.appendChild(wrap);
+  });
+}
+
+function selectGalleryItem(idx) {
+  selectedGalleryIdx = idx;
+  document.querySelectorAll('.gallery-item').forEach((el, i) => el.classList.toggle('selected', i === idx));
+}
+
+function loadSelectedToFrame() {
+  if (selectedGalleryIdx < 0 || selectedGalleryIdx >= galleryItems.length) return;
+  frames[currentFrame].set(galleryItems[selectedGalleryIdx].data);
+  renderFrame(currentFrame); updateCurrentThumb(); maybeSendToMatrix();
+}
+function loadSelectedAsNewFrame() {
+  if (selectedGalleryIdx < 0 || selectedGalleryIdx >= galleryItems.length) return;
+  frames.splice(currentFrame + 1, 0, new Uint8Array(galleryItems[selectedGalleryIdx].data));
+  currentFrame++; rebuildTimeline(); renderFrame(currentFrame); maybeSendToMatrix();
+}
+function clearGallery() {
+  galleryItems = []; selectedGalleryIdx = -1;
+  document.getElementById('gallery-status').textContent = '';
+  const container = document.getElementById('gallery-container');
+  container.innerHTML = '';
+  const empty = document.getElementById('gallery-empty');
+  empty.style.display = ''; container.appendChild(empty);
+}
+
+// ══════════════════════════════════════════════════════════════
+// ANIMATION SAVE/LOAD (folder-based)
+// ══════════════════════════════════════════════════════════════
+let animationsRootHandle = null;
+const animsEmptyEl = document.getElementById('anims-empty');
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('visualizer-db', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(val, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror    = () => { db.close(); reject(tx.error); };
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const r = tx.objectStore('handles').get(key);
+    r.onsuccess = () => { db.close(); resolve(r.result || null); };
+    r.onerror   = () => { db.close(); reject(r.error); };
+  });
+}
+async function ensurePerm(handle, mode) {
+  if (!handle) return false;
+  const q = await handle.queryPermission({ mode });
+  if (q === 'granted') return true;
+  const r = await handle.requestPermission({ mode });
+  return r === 'granted';
+}
+
+async function pickAnimationsRoot() {
+  if (!window.showDirectoryPicker) { alert('File System Access API not supported. Use Chrome or Edge.'); return null; }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    animationsRootHandle = handle;
+    await idbSet('animationsRoot', handle);
+    document.getElementById('anim-status').textContent = `root: ${handle.name}`;
+    await refreshAnimationsGallery();
+    return handle;
+  } catch (e) { if (e.name !== 'AbortError') console.error(e); return null; }
+}
+
+async function ensureAnimationsRoot() {
+  if (animationsRootHandle && await ensurePerm(animationsRootHandle, 'readwrite')) return animationsRootHandle;
+  return await pickAnimationsRoot();
+}
+
+function frameToPngBlob(frame) {
+  const cv  = document.createElement('canvas');
+  cv.width  = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = frame[i]; d[j+1] = frame[i+1]; d[j+2] = frame[i+2]; d[j+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+  return new Promise(resolve => cv.toBlob(resolve, 'image/png'));
+}
+
+function newAnimation() {
+  if (frames.length > 1 || frames[0].some(v => v !== 0)) {
+    if (!confirm('Discard current animation and start a new one?')) return;
+  }
+  if (isPlaying) togglePlay();
+  frames = [new Uint8Array(FRAME_BYTES)];
+  currentFrame = 0;
+  document.getElementById('anim-name').value = '';
+  document.getElementById('anim-status').textContent = 'new animation';
+  rebuildTimeline(); renderFrame(0); maybeSendToMatrix();
+}
+
+async function saveAnimation() {
+  const raw = (document.getElementById('anim-name').value || '').trim();
+  if (!raw) { alert('Enter an animation name first.'); return; }
+  const name = raw.replace(/[\/\\:*?"<>|]/g, '_');
+  const root = await ensureAnimationsRoot();
+  if (!root) return;
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = `Saving "${name}"…`;
+  try {
+    const dir = await root.getDirectoryHandle(name, { create: true });
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && /^frame_\d+\.png$/i.test(entry.name)) await dir.removeEntry(entry.name);
+    }
+    const pad = Math.max(3, String(frames.length).length);
+    for (let i = 0; i < frames.length; i++) {
+      const blob = await frameToPngBlob(frames[i]);
+      const num  = String(i + 1).padStart(pad, '0');
+      const fh   = await dir.getFileHandle(`frame_${num}.png`, { create: true });
+      const ws   = await fh.createWritable();
+      await ws.write(blob); await ws.close();
+    }
+    statusEl.textContent = `saved "${name}" · ${frames.length} frames`;
+    await refreshAnimationsGallery();
+  } catch (e) { statusEl.textContent = 'save failed: ' + e.message; console.error(e); }
+}
+
+async function refreshAnimationsGallery(force = false) {
+  const container = document.getElementById('anims-container');
+  const statusEl  = document.getElementById('anims-status');
+  container.innerHTML = '';
+  if (!animationsRootHandle) {
+    animsEmptyEl.textContent = 'Pick a root folder to store and browse animations';
+    container.appendChild(animsEmptyEl); animsEmptyEl.style.display = ''; return;
+  }
+  if (!(await ensurePerm(animationsRootHandle, 'read'))) {
+    animsEmptyEl.textContent = 'Permission denied'; container.appendChild(animsEmptyEl); animsEmptyEl.style.display = ''; return;
+  }
+  statusEl.textContent = 'scanning…';
+  const anims = [];
+  try {
+    for await (const entry of animationsRootHandle.values()) {
+      if (entry.kind !== 'directory') continue;
+      const frameFiles = [];
+      for await (const f of entry.values()) {
+        if (f.kind === 'file' && /^frame_\d+\.png$/i.test(f.name)) frameFiles.push(f);
+      }
+      if (frameFiles.length === 0) continue;
+      frameFiles.sort((a, b) => a.name.localeCompare(b.name));
+      anims.push({ name: entry.name, dirHandle: entry, firstFile: frameFiles[0], count: frameFiles.length });
+    }
+  } catch (e) { statusEl.textContent = 'scan failed'; console.error(e); return; }
+  anims.sort((a, b) => a.name.localeCompare(b.name));
+  if (anims.length === 0) {
+    animsEmptyEl.textContent = `No animations in "${animationsRootHandle.name}" yet`;
+    container.appendChild(animsEmptyEl); animsEmptyEl.style.display = '';
+    statusEl.textContent = `${animationsRootHandle.name}: empty`; return;
+  }
+  animsEmptyEl.style.display = 'none';
+  for (const anim of anims) {
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-item';
+    wrap.title = `${anim.name} · ${anim.count} frames  (click to load)`;
+    wrap.onclick = () => loadAnimation(anim);
+    try {
+      const file = await anim.firstFile.getFile();
+      const data = await fileToFrame(file);
+      if (data) wrap.appendChild(makeThumbCanvas(data, 60, 60));
+    } catch (_) {}
+    const label = document.createElement('div');
+    label.className = 'gallery-item-name';
+    label.textContent = `${anim.name} (${anim.count})`;
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  }
+  statusEl.textContent = `${animationsRootHandle.name}: ${anims.length}`;
+}
+
+async function loadAnimation(anim) {
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = `Loading "${anim.name}"…`;
+  try {
+    const frameFiles = [];
+    for await (const f of anim.dirHandle.values()) {
+      if (f.kind === 'file' && /^frame_\d+\.png$/i.test(f.name)) frameFiles.push(f);
+    }
+    frameFiles.sort((a, b) => a.name.localeCompare(b.name));
+    const newFrames = [];
+    for (const fh of frameFiles) {
+      const file = await fh.getFile();
+      const data = await fileToFrame(file);
+      if (data) newFrames.push(data);
+    }
+    if (newFrames.length === 0) { statusEl.textContent = 'empty animation'; return; }
+    frames = newFrames; currentFrame = 0;
+    rebuildTimeline(); renderFrame(0);
+    document.getElementById('anim-name').value = anim.name;
+    statusEl.textContent = `loaded "${anim.name}" · ${newFrames.length} frames`;
+    maybeSendToMatrix();
+  } catch (e) { statusEl.textContent = 'load failed: ' + e.message; console.error(e); }
+}
+
+(async () => {
+  try {
+    const h = await idbGet('animationsRoot');
+    if (h) {
+      animationsRootHandle = h;
+      document.getElementById('anim-status').textContent = `root: ${h.name} (click to grant access)`;
+    }
+  } catch (_) {}
+})();
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+buildPalette();
+selectColor(activeColor);
+renderFrame(0);
+renderGrid();
+rebuildTimeline();
+</script>
+</body>
+</html>
