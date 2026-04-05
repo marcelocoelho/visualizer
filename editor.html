@@ -356,6 +356,93 @@ input[type="range"] {
   align-self: flex-start;
   line-height: 1.6;
 }
+
+/* ── Gallery ─────────────────────────────────────────── */
+#gallery-wrap {
+  width: 100%;
+  max-width: 900px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+#gallery-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.gallery-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#gallery-status {
+  margin-left: auto;
+  font-size: 10px;
+  color: #3a3a3a;
+}
+
+#gallery-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+}
+
+#gallery-scroll::-webkit-scrollbar { height: 4px; }
+#gallery-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
+#gallery-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+#gallery-container {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+#gallery-empty {
+  color: #2a2a2a;
+  font-size: 11px;
+  padding: 8px 0;
+}
+
+.gallery-item {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+}
+.gallery-item:hover { background: #222; border-color: #333; }
+.gallery-item.selected { border-color: #5a9a5a; background: #1a2a1a; }
+
+.gallery-item canvas {
+  image-rendering: pixelated;
+  border-radius: 3px;
+  display: block;
+}
+
+.gallery-item-name {
+  font-size: 9px;
+  color: #3a3a3a;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.gallery-item.selected .gallery-item-name { color: #5a9a5a; }
 </style>
 </head>
 <body>
@@ -454,6 +541,25 @@ input[type="range"] {
   </div>
   <div id="frames-scroll">
     <div id="frames-container"></div>
+  </div>
+</div>
+
+<!-- Gallery -->
+<div id="gallery-wrap">
+  <div id="gallery-header">
+    <span class="gallery-title">Image Gallery</span>
+    <button class="tl-btn" onclick="openGalleryFolder()" title="Open a folder of PNGs">⊞ Open Folder</button>
+    <input type="file" id="gallery-file-input" accept="image/png,image/gif,image/jpeg,image/bmp,image/webp" multiple style="display:none" onchange="loadGalleryFiles(this.files)">
+    <button class="tl-btn" onclick="document.getElementById('gallery-file-input').click()" title="Pick individual image files">+ Files</button>
+    <button class="tl-btn" onclick="loadSelectedToFrame()" id="gallery-load-btn" title="Load selected image into current frame" style="color:#7d7;border-color:#3a6a3a;">↓ Load into frame</button>
+    <button class="tl-btn" onclick="loadSelectedAsNewFrame()" title="Load selected image as a new frame">+ New frame</button>
+    <button class="tl-btn" onclick="clearGallery()" title="Clear gallery">✕ Clear</button>
+    <span id="gallery-status"></span>
+  </div>
+  <div id="gallery-scroll">
+    <div id="gallery-container">
+      <div id="gallery-empty">Open a folder or add files to browse images</div>
+    </div>
   </div>
 </div>
 
@@ -908,6 +1014,161 @@ window.addEventListener('keydown', e => {
       break;
   }
 });
+
+// ── Gallery ──────────────────────────────────────────────────
+// Each entry: { name, imageData (32x32 RGB888 Uint8Array), thumbCanvas }
+let galleryItems = [];
+let selectedGalleryIdx = -1;
+
+async function openGalleryFolder() {
+  if (!window.showDirectoryPicker) {
+    // Fallback: trigger file input
+    document.getElementById('gallery-file-input').click();
+    return;
+  }
+  try {
+    const dir = await window.showDirectoryPicker({ mode: 'read' });
+    const files = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && /\.(png|jpg|jpeg|gif|bmp|webp)$/i.test(entry.name)) {
+        files.push(await entry.getFile());
+      }
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    await addFilesToGallery(files);
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
+}
+
+async function loadGalleryFiles(fileList) {
+  const files = Array.from(fileList).sort((a, b) => a.name.localeCompare(b.name));
+  await addFilesToGallery(files);
+}
+
+async function addFilesToGallery(files) {
+  const statusEl = document.getElementById('gallery-status');
+  statusEl.textContent = `Loading ${files.length} image(s)…`;
+  for (const file of files) {
+    const data = await fileToFrame(file);
+    if (!data) continue;
+    const thumb = makeThumbCanvas(data, 60, 60);
+    galleryItems.push({ name: file.name.replace(/\.[^.]+$/, ''), data, thumb });
+  }
+  rebuildGallery();
+  statusEl.textContent = `${galleryItems.length} image(s)`;
+}
+
+// Decode an image file and scale it to 32x32, return RGB888 Uint8Array
+function fileToFrame(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img  = new Image();
+    img.onload = () => {
+      const tmp = document.createElement('canvas');
+      tmp.width = W; tmp.height = H;
+      const ctx = tmp.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, W, H);
+      const id  = ctx.getImageData(0, 0, W, H);
+      const buf = new Uint8Array(FRAME_BYTES);
+      for (let i = 0, j = 0; i < PIXELS; i++, j += 4) {
+        buf[i * 3]     = id.data[j];
+        buf[i * 3 + 1] = id.data[j + 1];
+        buf[i * 3 + 2] = id.data[j + 2];
+      }
+      URL.revokeObjectURL(url);
+      resolve(buf);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+function makeThumbCanvas(data, w, h) {
+  const cv  = document.createElement('canvas');
+  cv.width  = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = data[i]; d[j+1] = data[i+1]; d[j+2] = data[i+2]; d[j+3] = 255;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, w, h);
+  return cv;
+}
+
+function rebuildGallery() {
+  const container = document.getElementById('gallery-container');
+  const empty     = document.getElementById('gallery-empty');
+  container.innerHTML = '';
+  if (galleryItems.length === 0) {
+    container.appendChild(empty);
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  galleryItems.forEach((item, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-item' + (i === selectedGalleryIdx ? ' selected' : '');
+    wrap.title = item.name;
+    wrap.onclick = () => selectGalleryItem(i);
+    wrap.ondblclick = () => { selectGalleryItem(i); loadSelectedToFrame(); };
+
+    const cv = item.thumb.cloneNode();
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(item.thumb, 0, 0);
+
+    const label = document.createElement('div');
+    label.className = 'gallery-item-name';
+    label.textContent = item.name;
+
+    wrap.appendChild(cv);
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  });
+}
+
+function selectGalleryItem(idx) {
+  selectedGalleryIdx = idx;
+  document.querySelectorAll('.gallery-item').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+}
+
+function loadSelectedToFrame() {
+  if (selectedGalleryIdx < 0 || selectedGalleryIdx >= galleryItems.length) return;
+  frames[currentFrame].set(galleryItems[selectedGalleryIdx].data);
+  renderFrame(currentFrame);
+  updateCurrentThumb();
+  maybeSendToMatrix();
+}
+
+function loadSelectedAsNewFrame() {
+  if (selectedGalleryIdx < 0 || selectedGalleryIdx >= galleryItems.length) return;
+  const newFrame = new Uint8Array(galleryItems[selectedGalleryIdx].data);
+  frames.splice(currentFrame + 1, 0, newFrame);
+  currentFrame++;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+  maybeSendToMatrix();
+}
+
+function clearGallery() {
+  galleryItems = [];
+  selectedGalleryIdx = -1;
+  document.getElementById('gallery-status').textContent = '';
+  const container = document.getElementById('gallery-container');
+  container.innerHTML = '';
+  const empty = document.getElementById('gallery-empty');
+  empty.style.display = '';
+  container.appendChild(empty);
+}
 
 // ── Init ─────────────────────────────────────────────────────
 buildPalette();
