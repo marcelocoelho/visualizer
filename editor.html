@@ -40,7 +40,7 @@ h1 {
   padding: 7px 12px;
   flex-wrap: wrap;
   width: 100%;
-  max-width: 900px;
+  max-width: 1100px;
 }
 
 .sep {
@@ -127,7 +127,7 @@ input[type="color"] {
   gap: 10px;
   align-items: flex-start;
   width: 100%;
-  max-width: 900px;
+  max-width: 1100px;
 }
 
 /* canvas */
@@ -264,7 +264,7 @@ input[type="range"] {
 /* ── Timeline ────────────────────────────────────────── */
 #timeline-wrap {
   width: 100%;
-  max-width: 900px;
+  max-width: 1100px;
   background: #181818;
   border: 1px solid #2a2a2a;
   border-radius: 8px;
@@ -344,6 +344,33 @@ input[type="range"] {
 }
 .frame-thumb.current .frame-num { color: #5a9a5a; }
 
+/* save row */
+#save-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #222;
+}
+#save-row input[type="text"] {
+  flex: 0 0 180px;
+  background: #222;
+  border: 1px solid #333;
+  color: #ccc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  outline: none;
+}
+#save-row input[type="text"]:focus { border-color: #3a6a3a; }
+#anim-status, #anims-status {
+  font-size: 10px;
+  color: #3a3a3a;
+  margin-left: auto;
+}
+
 /* scrollbar */
 #frames-scroll::-webkit-scrollbar { height: 4px; }
 #frames-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
@@ -357,21 +384,29 @@ input[type="range"] {
   line-height: 1.6;
 }
 
-/* ── Gallery ─────────────────────────────────────────── */
-#gallery-wrap {
-  width: 100%;
-  max-width: 900px;
+/* ── Galleries (left column) ─────────────────────────── */
+#galleries-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.gallery-wrap {
   background: #181818;
   border: 1px solid #2a2a2a;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-#gallery-header {
+.gallery-header {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-bottom: 8px;
+  gap: 6px;
 }
 
 .gallery-title {
@@ -381,48 +416,60 @@ input[type="range"] {
   letter-spacing: 1px;
 }
 
-#gallery-status {
+#gallery-status, #anims-status {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 9px;
   color: #3a3a3a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-#gallery-scroll {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-  min-height: 80px;
+.gallery-actions {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gallery-actions .tl-btn { padding: 2px 6px; font-size: 10px; }
+
+.gallery-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 240px;
+  padding: 2px;
+  border-top: 1px solid #222;
+  padding-top: 6px;
 }
 
-#gallery-scroll::-webkit-scrollbar { height: 4px; }
-#gallery-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
-#gallery-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+.gallery-scroll::-webkit-scrollbar { width: 4px; }
+.gallery-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
+.gallery-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 
-#gallery-container {
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
+#gallery-container, #anims-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 5px;
 }
 
-#gallery-empty {
+#gallery-empty, #anims-empty {
+  grid-column: 1 / -1;
   color: #2a2a2a;
-  font-size: 11px;
-  padding: 8px 0;
+  font-size: 10px;
+  padding: 6px 2px;
+  line-height: 1.4;
 }
 
 .gallery-item {
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   cursor: pointer;
   padding: 3px;
   border-radius: 5px;
   border: 1px solid transparent;
   transition: background 0.1s, border-color 0.1s;
+  min-width: 0;
 }
 .gallery-item:hover { background: #222; border-color: #333; }
 .gallery-item.selected { border-color: #5a9a5a; background: #1a2a1a; }
@@ -493,6 +540,44 @@ input[type="range"] {
     <canvas id="grid-canvas"   width="512" height="512"></canvas>
   </div>
 
+  <!-- Left galleries column -->
+  <div id="galleries-column">
+    <div class="gallery-wrap">
+      <div class="gallery-header">
+        <span class="gallery-title">Image Gallery</span>
+        <span id="gallery-status"></span>
+      </div>
+      <div class="gallery-actions">
+        <button class="tl-btn" onclick="openGalleryFolder()" title="Open a folder of PNGs">⊞ Folder</button>
+        <input type="file" id="gallery-file-input" accept="image/png,image/gif,image/jpeg,image/bmp,image/webp" multiple style="display:none" onchange="loadGalleryFiles(this.files)">
+        <button class="tl-btn" onclick="document.getElementById('gallery-file-input').click()" title="Pick individual image files">+ Files</button>
+        <button class="tl-btn" onclick="loadSelectedToFrame()" id="gallery-load-btn" title="Load selected image into current frame" style="color:#7d7;border-color:#3a6a3a;">↓ Load</button>
+        <button class="tl-btn" onclick="loadSelectedAsNewFrame()" title="Load selected image as a new frame">+ Frame</button>
+        <button class="tl-btn" onclick="clearGallery()" title="Clear gallery">✕</button>
+      </div>
+      <div class="gallery-scroll">
+        <div id="gallery-container">
+          <div id="gallery-empty">Open a folder or add files to browse images</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gallery-wrap">
+      <div class="gallery-header">
+        <span class="gallery-title">Saved Animations</span>
+        <span id="anims-status"></span>
+      </div>
+      <div class="gallery-actions">
+        <button class="tl-btn" onclick="refreshAnimationsGallery(true)" title="Refresh list">↻ Refresh</button>
+      </div>
+      <div class="gallery-scroll">
+        <div id="anims-container">
+          <div id="anims-empty">Pick a root folder to store and browse animations</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Side panel -->
   <div id="side-panel">
 
@@ -542,24 +627,13 @@ input[type="range"] {
   <div id="frames-scroll">
     <div id="frames-container"></div>
   </div>
-</div>
-
-<!-- Gallery -->
-<div id="gallery-wrap">
-  <div id="gallery-header">
-    <span class="gallery-title">Image Gallery</span>
-    <button class="tl-btn" onclick="openGalleryFolder()" title="Open a folder of PNGs">⊞ Open Folder</button>
-    <input type="file" id="gallery-file-input" accept="image/png,image/gif,image/jpeg,image/bmp,image/webp" multiple style="display:none" onchange="loadGalleryFiles(this.files)">
-    <button class="tl-btn" onclick="document.getElementById('gallery-file-input').click()" title="Pick individual image files">+ Files</button>
-    <button class="tl-btn" onclick="loadSelectedToFrame()" id="gallery-load-btn" title="Load selected image into current frame" style="color:#7d7;border-color:#3a6a3a;">↓ Load into frame</button>
-    <button class="tl-btn" onclick="loadSelectedAsNewFrame()" title="Load selected image as a new frame">+ New frame</button>
-    <button class="tl-btn" onclick="clearGallery()" title="Clear gallery">✕ Clear</button>
-    <span id="gallery-status"></span>
-  </div>
-  <div id="gallery-scroll">
-    <div id="gallery-container">
-      <div id="gallery-empty">Open a folder or add files to browse images</div>
-    </div>
+  <div id="save-row">
+    <button class="tl-btn" onclick="newAnimation()" title="Start a new blank animation" style="color:#d9a;border-color:#6a3a6a;">✨ New</button>
+    <span class="tl-title">Save As</span>
+    <input type="text" id="anim-name" placeholder="animation name" autocomplete="off">
+    <button class="tl-btn" onclick="saveAnimation()" title="Save all frames to a folder" style="color:#7d7;border-color:#3a6a3a;">💾 Save</button>
+    <button class="tl-btn" onclick="pickAnimationsRoot()" title="Choose the folder where animations are stored">⊞ Root…</button>
+    <span id="anim-status"></span>
   </div>
 </div>
 
@@ -1169,6 +1243,246 @@ function clearGallery() {
   empty.style.display = '';
   container.appendChild(empty);
 }
+
+// ── Animation save/load (folder-based) ───────────────────────
+// Each saved animation is a folder containing frame_001.png, frame_002.png, ...
+// animationsRootHandle is the parent directory containing all animation folders.
+let animationsRootHandle = null;
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('visualizer-db', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(val, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror    = () => { db.close(); reject(tx.error); };
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const r  = tx.objectStore('handles').get(key);
+    r.onsuccess = () => { db.close(); resolve(r.result || null); };
+    r.onerror   = () => { db.close(); reject(r.error); };
+  });
+}
+
+async function ensurePerm(handle, mode) {
+  if (!handle) return false;
+  const q = await handle.queryPermission({ mode });
+  if (q === 'granted') return true;
+  const r = await handle.requestPermission({ mode });
+  return r === 'granted';
+}
+
+async function pickAnimationsRoot() {
+  if (!window.showDirectoryPicker) {
+    alert('Your browser does not support the File System Access API. Use Chrome or Edge.');
+    return null;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    animationsRootHandle = handle;
+    await idbSet('animationsRoot', handle);
+    document.getElementById('anim-status').textContent = `root: ${handle.name}`;
+    await refreshAnimationsGallery();
+    return handle;
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+    return null;
+  }
+}
+
+async function ensureAnimationsRoot() {
+  if (animationsRootHandle && await ensurePerm(animationsRootHandle, 'readwrite')) {
+    return animationsRootHandle;
+  }
+  return await pickAnimationsRoot();
+}
+
+function frameToPngBlob(frame) {
+  const cv  = document.createElement('canvas');
+  cv.width  = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = frame[i]; d[j+1] = frame[i+1]; d[j+2] = frame[i+2]; d[j+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+  return new Promise(resolve => cv.toBlob(resolve, 'image/png'));
+}
+
+function newAnimation() {
+  if (frames.length > 1 || frames[0].some(v => v !== 0)) {
+    if (!confirm('Discard current animation and start a new one?')) return;
+  }
+  if (isPlaying) togglePlay();
+  frames = [new Uint8Array(FRAME_BYTES)];
+  currentFrame = 0;
+  document.getElementById('anim-name').value = '';
+  document.getElementById('anim-status').textContent = 'new animation';
+  rebuildTimeline();
+  renderFrame(0);
+  maybeSendToMatrix();
+}
+
+async function saveAnimation() {
+  const raw = (document.getElementById('anim-name').value || '').trim();
+  if (!raw) { alert('Enter an animation name first.'); return; }
+  const name = raw.replace(/[\/\\:*?"<>|]/g, '_');
+
+  const root = await ensureAnimationsRoot();
+  if (!root) return;
+
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = `Saving "${name}"…`;
+
+  try {
+    const dir = await root.getDirectoryHandle(name, { create: true });
+    // remove old frame_*.png so frame counts can shrink cleanly
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && /^frame_\d+\.png$/i.test(entry.name)) {
+        await dir.removeEntry(entry.name);
+      }
+    }
+    const pad = Math.max(3, String(frames.length).length);
+    for (let i = 0; i < frames.length; i++) {
+      const blob = await frameToPngBlob(frames[i]);
+      const num  = String(i + 1).padStart(pad, '0');
+      const fh   = await dir.getFileHandle(`frame_${num}.png`, { create: true });
+      const ws   = await fh.createWritable();
+      await ws.write(blob);
+      await ws.close();
+    }
+    statusEl.textContent = `saved "${name}" · ${frames.length} frames`;
+    await refreshAnimationsGallery();
+  } catch (e) {
+    statusEl.textContent = 'save failed: ' + e.message;
+    console.error(e);
+  }
+}
+
+// Cache the empty-state element so it survives container.innerHTML clears
+const animsEmptyEl = document.getElementById('anims-empty');
+
+async function refreshAnimationsGallery(force = false) {
+  const container = document.getElementById('anims-container');
+  const statusEl  = document.getElementById('anims-status');
+  container.innerHTML = '';
+
+  if (!animationsRootHandle) {
+    animsEmptyEl.textContent = 'Pick a root folder to store and browse animations';
+    container.appendChild(animsEmptyEl);
+    animsEmptyEl.style.display = '';
+    return;
+  }
+  if (!(await ensurePerm(animationsRootHandle, 'read'))) {
+    animsEmptyEl.textContent = 'Permission to read folder was denied';
+    container.appendChild(animsEmptyEl);
+    animsEmptyEl.style.display = '';
+    return;
+  }
+
+  statusEl.textContent = 'scanning…';
+  const anims = [];
+  try {
+    for await (const entry of animationsRootHandle.values()) {
+      if (entry.kind !== 'directory') continue;
+      const frameFiles = [];
+      for await (const f of entry.values()) {
+        if (f.kind === 'file' && /^frame_\d+\.png$/i.test(f.name)) frameFiles.push(f);
+      }
+      if (frameFiles.length === 0) continue;
+      frameFiles.sort((a, b) => a.name.localeCompare(b.name));
+      anims.push({ name: entry.name, dirHandle: entry, firstFile: frameFiles[0], count: frameFiles.length });
+    }
+  } catch (e) {
+    statusEl.textContent = 'scan failed';
+    console.error(e);
+    return;
+  }
+  anims.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (anims.length === 0) {
+    animsEmptyEl.textContent = `No animations in "${animationsRootHandle.name}" yet`;
+    container.appendChild(animsEmptyEl);
+    animsEmptyEl.style.display = '';
+    statusEl.textContent = `${animationsRootHandle.name}: empty`;
+    return;
+  }
+
+  animsEmptyEl.style.display = 'none';
+  for (const anim of anims) {
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-item';
+    wrap.title = `${anim.name} · ${anim.count} frames  (click to load)`;
+    wrap.onclick = () => loadAnimation(anim);
+
+    try {
+      const file = await anim.firstFile.getFile();
+      const data = await fileToFrame(file);
+      if (data) wrap.appendChild(makeThumbCanvas(data, 60, 60));
+    } catch (_) {}
+
+    const label = document.createElement('div');
+    label.className = 'gallery-item-name';
+    label.textContent = `${anim.name} (${anim.count})`;
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  }
+  statusEl.textContent = `${animationsRootHandle.name}: ${anims.length} animation(s)`;
+}
+
+async function loadAnimation(anim) {
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = `Loading "${anim.name}"…`;
+  try {
+    const frameFiles = [];
+    for await (const f of anim.dirHandle.values()) {
+      if (f.kind === 'file' && /^frame_\d+\.png$/i.test(f.name)) frameFiles.push(f);
+    }
+    frameFiles.sort((a, b) => a.name.localeCompare(b.name));
+    const newFrames = [];
+    for (const fh of frameFiles) {
+      const file = await fh.getFile();
+      const data = await fileToFrame(file);
+      if (data) newFrames.push(data);
+    }
+    if (newFrames.length === 0) { statusEl.textContent = 'empty animation'; return; }
+    frames = newFrames;
+    currentFrame = 0;
+    rebuildTimeline();
+    renderFrame(0);
+    document.getElementById('anim-name').value = anim.name;
+    statusEl.textContent = `loaded "${anim.name}" · ${newFrames.length} frames`;
+    maybeSendToMatrix();
+  } catch (e) {
+    statusEl.textContent = 'load failed: ' + e.message;
+    console.error(e);
+  }
+}
+
+// Try to restore the last-picked root folder on startup
+(async () => {
+  try {
+    const h = await idbGet('animationsRoot');
+    if (h) {
+      animationsRootHandle = h;
+      document.getElementById('anim-status').textContent = `root: ${h.name} (click to grant access)`;
+      // Don't auto-prompt for permission — wait for user action
+    }
+  } catch (_) {}
+})();
 
 // ── Init ─────────────────────────────────────────────────────
 buildPalette();
