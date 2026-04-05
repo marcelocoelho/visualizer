@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LED Animation Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #111;
+  color: #ccc;
+  font-family: monospace;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 14px 16px;
+  gap: 10px;
+  user-select: none;
+}
+
+h1 {
+  font-size: 12px;
+  color: #444;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  align-self: flex-start;
+}
+
+/* ── Toolbar ─────────────────────────────────────────── */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 7px 12px;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.sep {
+  width: 1px;
+  height: 28px;
+  background: #2a2a2a;
+}
+
+.tool-label {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* icon buttons */
+.icon-btn {
+  background: #202020;
+  border: 1px solid #333;
+  color: #888;
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.icon-btn:hover { background: #2a2a2a; color: #bbb; }
+.icon-btn.active { background: #1e3a1e; border-color: #3a7a3a; color: #7d7; }
+.icon-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* palette */
+#palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 256px;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.1s, border-color 0.1s;
+  flex-shrink: 0;
+}
+.swatch:hover { transform: scale(1.25); }
+.swatch.selected { border-color: #fff; }
+
+#color-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#active-color-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  border: 2px solid #444;
+  flex-shrink: 0;
+}
+
+input[type="color"] {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  flex-shrink: 0;
+}
+
+/* ── Main area ───────────────────────────────────────── */
+#main {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1100px;
+}
+
+/* canvas */
+#canvas-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+#editor-canvas {
+  display: block;
+  image-rendering: pixelated;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+  cursor: crosshair;
+  width: 512px;
+  height: 512px;
+}
+
+#grid-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  border-radius: 6px;
+  width: 512px;
+  height: 512px;
+}
+
+/* ── Side panel ──────────────────────────────────────── */
+#side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.card {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.card-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+/* playback card */
+#playback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fps-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #555;
+}
+
+.fps-row input[type="number"] {
+  width: 48px;
+  background: #222;
+  border: 1px solid #333;
+  color: #ccc;
+  padding: 3px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  text-align: center;
+}
+
+.full-btn {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 12px;
+  text-align: center;
+  transition: background 0.12s;
+}
+
+.play-btn {
+  background: #1e2e1e;
+  border: 1px solid #2e5e2e;
+  color: #7d7;
+}
+.play-btn:hover { background: #263a26; }
+.play-btn.active { background: #2a4a2a; border-color: #4a8a4a; }
+
+.serial-btn {
+  background: #202020;
+  border: 1px solid #383838;
+  color: #aaa;
+}
+.serial-btn:hover { background: #2a2a2a; }
+.serial-btn.connected { background: #1e2e1e; border-color: #2e5e2e; color: #7d7; }
+
+#serial-status {
+  font-size: 10px;
+  color: #3a3a3a;
+  text-align: center;
+  min-height: 14px;
+}
+
+/* brightness */
+#brightness-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #555;
+  font-size: 11px;
+}
+input[type="range"] {
+  flex: 1;
+  accent-color: #555;
+  height: 3px;
+}
+
+/* info */
+#cursor-info {
+  font-size: 10px;
+  color: #3a3a3a;
+  text-align: center;
+  min-height: 14px;
+}
+
+/* ── Timeline ────────────────────────────────────────── */
+#timeline-wrap {
+  width: 100%;
+  max-width: 1100px;
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+#timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.tl-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.tl-btn {
+  background: #202020;
+  border: 1px solid #333;
+  color: #888;
+  padding: 3px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 11px;
+  transition: background 0.12s;
+}
+.tl-btn:hover { background: #2a2a2a; color: #bbb; }
+
+#frame-count {
+  margin-left: auto;
+  color: #3a3a3a;
+  font-size: 11px;
+}
+
+#frames-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+#frames-container {
+  display: flex;
+  gap: 5px;
+  min-height: 62px;
+  align-items: flex-end;
+}
+
+.frame-thumb {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.frame-thumb:hover { background: #222; }
+
+.frame-thumb canvas {
+  image-rendering: pixelated;
+  border: 1px solid #333;
+  border-radius: 3px;
+  display: block;
+}
+.frame-thumb.current canvas { border-color: #5a9a5a; box-shadow: 0 0 0 1px #3a7a3a; }
+
+.frame-num {
+  font-size: 9px;
+  color: #3a3a3a;
+}
+.frame-thumb.current .frame-num { color: #5a9a5a; }
+
+/* save row */
+#save-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #222;
+}
+#save-row input[type="text"] {
+  flex: 0 0 180px;
+  background: #222;
+  border: 1px solid #333;
+  color: #ccc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  outline: none;
+}
+#save-row input[type="text"]:focus { border-color: #3a6a3a; }
+#anim-status, #anims-status {
+  font-size: 10px;
+  color: #3a3a3a;
+  margin-left: auto;
+}
+
+/* scrollbar */
+#frames-scroll::-webkit-scrollbar { height: 4px; }
+#frames-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
+#frames-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+/* shortcuts hint */
+#shortcuts {
+  font-size: 10px;
+  color: #2a2a2a;
+  align-self: flex-start;
+  line-height: 1.6;
+}
+
+/* ── Galleries (left column) ─────────────────────────── */
+#galleries-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 170px;
+  flex-shrink: 0;
+}
+
+.gallery-wrap {
+  background: #181818;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gallery-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gallery-title {
+  color: #3a3a3a;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#gallery-status, #anims-status {
+  margin-left: auto;
+  font-size: 9px;
+  color: #3a3a3a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gallery-actions .tl-btn { padding: 2px 6px; font-size: 10px; }
+
+.gallery-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 240px;
+  padding: 2px;
+  border-top: 1px solid #222;
+  padding-top: 6px;
+}
+
+.gallery-scroll::-webkit-scrollbar { width: 4px; }
+.gallery-scroll::-webkit-scrollbar-track { background: #161616; border-radius: 2px; }
+.gallery-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+#gallery-container, #anims-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 5px;
+}
+
+#gallery-empty, #anims-empty {
+  grid-column: 1 / -1;
+  color: #2a2a2a;
+  font-size: 10px;
+  padding: 6px 2px;
+  line-height: 1.4;
+}
+
+.gallery-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  transition: background 0.1s, border-color 0.1s;
+  min-width: 0;
+}
+.gallery-item:hover { background: #222; border-color: #333; }
+.gallery-item.selected { border-color: #5a9a5a; background: #1a2a1a; }
+
+.gallery-item canvas {
+  image-rendering: pixelated;
+  border-radius: 3px;
+  display: block;
+}
+
+.gallery-item-name {
+  font-size: 9px;
+  color: #3a3a3a;
+  max-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.gallery-item.selected .gallery-item-name { color: #5a9a5a; }
+</style>
+</head>
+<body>
+
+<h1>LED Animation Editor</h1>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <!-- Drawing tools -->
+  <span class="tool-label">Tool</span>
+  <button class="icon-btn active" id="tool-pencil"      title="Pencil  [P]"     onclick="setTool('pencil')">✏</button>
+  <button class="icon-btn"        id="tool-eraser"      title="Eraser  [E]"     onclick="setTool('eraser')">◻</button>
+  <button class="icon-btn"        id="tool-fill"        title="Fill    [F]"     onclick="setTool('fill')">◈</button>
+  <button class="icon-btn"        id="tool-eyedropper"  title="Pick    [K]"     onclick="setTool('eyedropper')">⊕</button>
+
+  <div class="sep"></div>
+
+  <!-- Color -->
+  <div id="color-inputs">
+    <div id="active-color-box"></div>
+    <input type="color" id="color-picker" title="Custom color" value="#ff4400">
+  </div>
+
+  <div class="sep"></div>
+
+  <!-- Palette -->
+  <div id="palette"></div>
+
+  <div class="sep"></div>
+
+  <!-- Frame ops -->
+  <button class="icon-btn" title="Clear frame  [Del]"    onclick="clearFrame()">🗑</button>
+  <button class="icon-btn" title="Copy frame   [C]"      onclick="copyFrame()">⎘</button>
+  <button class="icon-btn" title="Paste frame  [V]"      onclick="pasteFrame()">⎙</button>
+
+  <div class="sep"></div>
+
+  <!-- Grid -->
+  <button class="icon-btn active" id="grid-btn" title="Toggle grid  [G]" onclick="toggleGrid()">⊞</button>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- Canvas -->
+  <div id="canvas-wrap">
+    <canvas id="editor-canvas" width="512" height="512"></canvas>
+    <canvas id="grid-canvas"   width="512" height="512"></canvas>
+  </div>
+
+  <!-- Left galleries column -->
+  <div id="galleries-column">
+    <div class="gallery-wrap">
+      <div class="gallery-header">
+        <span class="gallery-title">Image Gallery</span>
+        <span id="gallery-status"></span>
+      </div>
+      <div class="gallery-actions">
+        <button class="tl-btn" onclick="openGalleryFolder()" title="Open a folder of PNGs">⊞ Folder</button>
+        <input type="file" id="gallery-file-input" accept="image/png,image/gif,image/jpeg,image/bmp,image/webp" multiple style="display:none" onchange="loadGalleryFiles(this.files)">
+        <button class="tl-btn" onclick="document.getElementById('gallery-file-input').click()" title="Pick individual image files">+ Files</button>
+        <button class="tl-btn" onclick="loadSelectedToFrame()" id="gallery-load-btn" title="Load selected image into current frame" style="color:#7d7;border-color:#3a6a3a;">↓ Load</button>
+        <button class="tl-btn" onclick="loadSelectedAsNewFrame()" title="Load selected image as a new frame">+ Frame</button>
+        <button class="tl-btn" onclick="clearGallery()" title="Clear gallery">✕</button>
+      </div>
+      <div class="gallery-scroll">
+        <div id="gallery-container">
+          <div id="gallery-empty">Open a folder or add files to browse images</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gallery-wrap">
+      <div class="gallery-header">
+        <span class="gallery-title">Saved Animations</span>
+        <span id="anims-status"></span>
+      </div>
+      <div class="gallery-actions">
+        <button class="tl-btn" onclick="refreshAnimationsGallery(true)" title="Refresh list">↻ Refresh</button>
+      </div>
+      <div class="gallery-scroll">
+        <div id="anims-container">
+          <div id="anims-empty">Pick a root folder to store and browse animations</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side panel -->
+  <div id="side-panel">
+
+    <div class="card">
+      <div class="card-title">Playback</div>
+      <div id="playback">
+        <div class="fps-row">
+          <span>FPS</span>
+          <input type="number" id="fps-input" value="12" min="1" max="60">
+        </div>
+        <button class="full-btn play-btn" id="play-btn" onclick="togglePlay()">▶  Play</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Matrix</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="full-btn serial-btn" id="serial-btn" onclick="toggleSerial()">⬡  Connect Matrix</button>
+        <div id="serial-status"></div>
+        <div id="brightness-row">
+          <span>Bright</span>
+          <input type="range" id="brightness" min="5" max="100" value="100">
+          <span id="bright-val">100%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;">
+      <div class="card-title">Cursor</div>
+      <div id="cursor-info">—</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Timeline -->
+<div id="timeline-wrap">
+  <div id="timeline-header">
+    <span class="tl-title">Timeline</span>
+    <button class="tl-btn" onclick="addFrame()"       title="Add blank frame after current">+ Add</button>
+    <button class="tl-btn" onclick="duplicateFrame()" title="Duplicate current frame">⧉ Dup</button>
+    <button class="tl-btn" onclick="deleteFrame()"    title="Delete current frame">✕ Del</button>
+    <button class="tl-btn" onclick="moveFrameLeft()"  title="Move frame left">← Mv</button>
+    <button class="tl-btn" onclick="moveFrameRight()" title="Move frame right">Mv →</button>
+    <span id="frame-count"></span>
+  </div>
+  <div id="frames-scroll">
+    <div id="frames-container"></div>
+  </div>
+  <div id="save-row">
+    <button class="tl-btn" onclick="newAnimation()" title="Start a new blank animation" style="color:#d9a;border-color:#6a3a6a;">✨ New</button>
+    <span class="tl-title">Save As</span>
+    <input type="text" id="anim-name" placeholder="animation name" autocomplete="off">
+    <button class="tl-btn" onclick="saveAnimation()" title="Save all frames to a folder" style="color:#7d7;border-color:#3a6a3a;">💾 Save</button>
+    <button class="tl-btn" onclick="pickAnimationsRoot()" title="Choose the folder where animations are stored">⊞ Root…</button>
+    <span id="anim-status"></span>
+  </div>
+</div>
+
+<div id="shortcuts">
+  P pencil · E eraser · F fill · K eyedropper · G grid · C copy · V paste · Del clear · ← → prev/next frame · Space play
+</div>
+
+<script>
+// ── Constants ────────────────────────────────────────────────
+const W = 32, H = 32;
+const PIXELS = W * H;
+const FRAME_BYTES = PIXELS * 3; // RGB888
+
+// ── State ────────────────────────────────────────────────────
+let frames       = [new Uint8Array(FRAME_BYTES)];
+let currentFrame = 0;
+let currentTool  = 'pencil';
+let activeColor  = { r: 255, g: 68, b: 0 };
+let showGrid     = true;
+let isPlaying    = false;
+let playTimer    = null;
+let clipboard    = null;
+let isPainting   = false;
+let lastPainted  = { x: -1, y: -1 };
+
+// Serial
+let port = null, writer = null, serialConnected = false;
+let serialBusy = false;
+
+// ── Canvas elements ──────────────────────────────────────────
+const editorCanvas = document.getElementById('editor-canvas');
+const editorCtx    = editorCanvas.getContext('2d');
+const gridCanvas   = document.getElementById('grid-canvas');
+const gridCtx      = gridCanvas.getContext('2d');
+const CELL = 16; // display px per LED
+
+// Reusable offscreen canvas for fast rendering
+const offscreen    = document.createElement('canvas');
+offscreen.width = W; offscreen.height = H;
+const offCtx       = offscreen.getContext('2d');
+const imageData    = offCtx.createImageData(W, H);
+
+// ── Palette ──────────────────────────────────────────────────
+const PALETTE = [
+  '#000000','#111111','#222222','#444444','#777777','#aaaaaa','#dddddd','#ffffff',
+  '#ff0000','#ff5500','#ff9900','#ffcc00','#ffff00','#aaff00',
+  '#00ff00','#00ff88','#00ffcc','#00ffff','#00aaff','#0055ff',
+  '#0000ff','#5500ff','#aa00ff','#ff00ff','#ff00aa','#ff0055',
+  '#ff8888','#88ff88','#8888ff','#ffcc88','#88ccff','#cc88ff',
+  '#883300','#336600','#003366','#660033',
+];
+
+function hexToRgb(hex) {
+  return {
+    r: parseInt(hex.slice(1,3), 16),
+    g: parseInt(hex.slice(3,5), 16),
+    b: parseInt(hex.slice(5,7), 16),
+  };
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function buildPalette() {
+  const el = document.getElementById('palette');
+  PALETTE.forEach(hex => {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.style.background = hex;
+    s.title = hex;
+    s.onclick = () => selectColor(hexToRgb(hex), true);
+    el.appendChild(s);
+  });
+}
+
+function selectColor(rgb, fromPalette = false) {
+  activeColor = rgb;
+  const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+  document.getElementById('active-color-box').style.background = hex;
+  if (!fromPalette) document.getElementById('color-picker').value = hex;
+  document.querySelectorAll('.swatch').forEach(s => {
+    s.classList.toggle('selected', s.style.background === `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
+  });
+}
+
+document.getElementById('color-picker').addEventListener('input', e => {
+  selectColor(hexToRgb(e.target.value), false);
+});
+
+// ── Tool management ──────────────────────────────────────────
+function setTool(tool) {
+  currentTool = tool;
+  ['pencil','eraser','fill','eyedropper'].forEach(t => {
+    document.getElementById('tool-' + t).classList.toggle('active', t === tool);
+  });
+  editorCanvas.style.cursor = tool === 'fill' ? 'cell' : 'crosshair';
+}
+
+// ── Frame buffer helpers ─────────────────────────────────────
+function setPixel(buf, x, y, r, g, b) {
+  const i = (y * W + x) * 3;
+  buf[i] = r; buf[i+1] = g; buf[i+2] = b;
+}
+
+function getPixel(buf, x, y) {
+  const i = (y * W + x) * 3;
+  return { r: buf[i], g: buf[i+1], b: buf[i+2] };
+}
+
+function floodFill(buf, x, y, nr, ng, nb) {
+  const orig = getPixel(buf, x, y);
+  if (orig.r === nr && orig.g === ng && orig.b === nb) return;
+  const stack = [[x, y]];
+  const seen  = new Uint8Array(PIXELS);
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+    const idx = cy * W + cx;
+    if (seen[idx]) continue;
+    const p = getPixel(buf, cx, cy);
+    if (p.r !== orig.r || p.g !== orig.g || p.b !== orig.b) continue;
+    seen[idx] = 1;
+    setPixel(buf, cx, cy, nr, ng, nb);
+    stack.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+  }
+}
+
+// ── Rendering ────────────────────────────────────────────────
+function renderFrame(idx) {
+  const buf = frames[idx];
+  const d   = imageData.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = buf[i]; d[j+1] = buf[i+1]; d[j+2] = buf[i+2]; d[j+3] = 255;
+  }
+  offCtx.putImageData(imageData, 0, 0);
+  editorCtx.imageSmoothingEnabled = false;
+  editorCtx.drawImage(offscreen, 0, 0, 512, 512);
+}
+
+function renderGrid() {
+  gridCtx.clearRect(0, 0, 512, 512);
+  if (!showGrid) return;
+  gridCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+  gridCtx.lineWidth = 0.5;
+  for (let i = 0; i <= W; i++) {
+    gridCtx.beginPath(); gridCtx.moveTo(i*CELL, 0);   gridCtx.lineTo(i*CELL, 512); gridCtx.stroke();
+    gridCtx.beginPath(); gridCtx.moveTo(0, i*CELL);   gridCtx.lineTo(512, i*CELL); gridCtx.stroke();
+  }
+}
+
+function renderThumb(frame, canvas) {
+  const ctx = canvas.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = frame[i]; d[j+1] = frame[i+1]; d[j+2] = frame[i+2]; d[j+3] = 255;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+// ── Timeline ─────────────────────────────────────────────────
+function rebuildTimeline() {
+  const container = document.getElementById('frames-container');
+  container.innerHTML = '';
+  frames.forEach((frame, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'frame-thumb' + (i === currentFrame ? ' current' : '');
+    wrap.title = `Frame ${i+1}`;
+    wrap.onclick = () => selectFrame(i);
+
+    const cv  = document.createElement('canvas');
+    cv.width  = 48; cv.height = 48;
+    renderThumb(frame, cv);
+
+    const num = document.createElement('div');
+    num.className = 'frame-num';
+    num.textContent = i + 1;
+
+    wrap.appendChild(cv);
+    wrap.appendChild(num);
+    container.appendChild(wrap);
+  });
+  document.getElementById('frame-count').textContent =
+    `Frame ${currentFrame + 1} / ${frames.length}`;
+
+  // scroll current thumb into view
+  const thumbs = container.querySelectorAll('.frame-thumb');
+  if (thumbs[currentFrame]) {
+    thumbs[currentFrame].scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function updateCurrentThumb() {
+  const thumbs = document.querySelectorAll('.frame-thumb');
+  if (thumbs[currentFrame]) {
+    renderThumb(frames[currentFrame], thumbs[currentFrame].querySelector('canvas'));
+  }
+}
+
+function selectFrame(idx) {
+  currentFrame = idx;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+  maybeSendToMatrix();
+}
+
+// ── Frame operations ─────────────────────────────────────────
+function addFrame() {
+  frames.splice(currentFrame + 1, 0, new Uint8Array(FRAME_BYTES));
+  currentFrame++;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+}
+
+function duplicateFrame() {
+  frames.splice(currentFrame + 1, 0, new Uint8Array(frames[currentFrame]));
+  currentFrame++;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+}
+
+function deleteFrame() {
+  if (frames.length === 1) { clearFrame(); return; }
+  frames.splice(currentFrame, 1);
+  if (currentFrame >= frames.length) currentFrame = frames.length - 1;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+}
+
+function clearFrame() {
+  frames[currentFrame].fill(0);
+  renderFrame(currentFrame);
+  updateCurrentThumb();
+  maybeSendToMatrix();
+}
+
+function copyFrame()  { clipboard = new Uint8Array(frames[currentFrame]); }
+function pasteFrame() {
+  if (!clipboard) return;
+  frames[currentFrame].set(clipboard);
+  renderFrame(currentFrame);
+  updateCurrentThumb();
+  maybeSendToMatrix();
+}
+
+function moveFrameLeft() {
+  if (currentFrame === 0) return;
+  [frames[currentFrame - 1], frames[currentFrame]] = [frames[currentFrame], frames[currentFrame - 1]];
+  currentFrame--;
+  rebuildTimeline();
+}
+
+function moveFrameRight() {
+  if (currentFrame === frames.length - 1) return;
+  [frames[currentFrame + 1], frames[currentFrame]] = [frames[currentFrame], frames[currentFrame + 1]];
+  currentFrame++;
+  rebuildTimeline();
+}
+
+function toggleGrid() {
+  showGrid = !showGrid;
+  document.getElementById('grid-btn').classList.toggle('active', showGrid);
+  renderGrid();
+}
+
+// ── Canvas interaction ───────────────────────────────────────
+function canvasXY(e) {
+  const rect = editorCanvas.getBoundingClientRect();
+  const sx   = editorCanvas.width  / rect.width;
+  const sy   = editorCanvas.height / rect.height;
+  return {
+    x: Math.max(0, Math.min(W-1, Math.floor((e.clientX - rect.left) * sx / CELL))),
+    y: Math.max(0, Math.min(H-1, Math.floor((e.clientY - rect.top)  * sy / CELL))),
+  };
+}
+
+function applyTool(x, y) {
+  const buf = frames[currentFrame];
+  switch (currentTool) {
+    case 'pencil':
+      setPixel(buf, x, y, activeColor.r, activeColor.g, activeColor.b);
+      break;
+    case 'eraser':
+      setPixel(buf, x, y, 0, 0, 0);
+      break;
+    case 'fill':
+      floodFill(buf, x, y, activeColor.r, activeColor.g, activeColor.b);
+      isPainting = false;
+      break;
+    case 'eyedropper': {
+      const p = getPixel(buf, x, y);
+      selectColor(p);
+      setTool('pencil');
+      return;
+    }
+  }
+  renderFrame(currentFrame);
+  updateCurrentThumb();
+  maybeSendToMatrix();
+}
+
+editorCanvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  isPainting = true;
+  const { x, y } = canvasXY(e);
+  lastPainted = { x, y };
+  applyTool(x, y);
+});
+
+editorCanvas.addEventListener('mousemove', e => {
+  const { x, y } = canvasXY(e);
+  document.getElementById('cursor-info').textContent = `x ${x}  y ${y}`;
+  if (!isPainting || currentTool === 'fill' || currentTool === 'eyedropper') return;
+  if (x === lastPainted.x && y === lastPainted.y) return;
+  lastPainted = { x, y };
+  applyTool(x, y);
+});
+
+editorCanvas.addEventListener('mouseleave', () => {
+  document.getElementById('cursor-info').textContent = '—';
+});
+
+window.addEventListener('mouseup', () => { isPainting = false; });
+editorCanvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── Playback ─────────────────────────────────────────────────
+function togglePlay() {
+  isPlaying = !isPlaying;
+  const btn = document.getElementById('play-btn');
+  if (isPlaying) {
+    btn.textContent = '⏸  Pause';
+    btn.classList.add('active');
+    startPlay();
+  } else {
+    btn.textContent = '▶  Play';
+    btn.classList.remove('active');
+    stopPlay();
+  }
+}
+
+function startPlay() {
+  stopPlay();
+  const fps = Math.max(1, parseInt(document.getElementById('fps-input').value) || 12);
+  playTimer = setInterval(() => {
+    currentFrame = (currentFrame + 1) % frames.length;
+    renderFrame(currentFrame);
+    rebuildTimeline();
+    if (serialConnected) sendFrame(frames[currentFrame]);
+  }, 1000 / fps);
+}
+
+function stopPlay() {
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+}
+
+// ── Serial ───────────────────────────────────────────────────
+const serialBtn    = document.getElementById('serial-btn');
+const serialStatus = document.getElementById('serial-status');
+const brightness   = document.getElementById('brightness');
+const brightVal    = document.getElementById('bright-val');
+
+brightness.addEventListener('input', () => {
+  brightVal.textContent = brightness.value + '%';
+});
+
+async function toggleSerial() {
+  if (serialConnected) await disconnectSerial();
+  else await connectSerial();
+}
+
+async function connectSerial() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 1500000 });
+    writer = port.writable.getWriter();
+    serialConnected = true;
+    serialBtn.textContent = '⬡  Disconnect Matrix';
+    serialBtn.classList.add('connected');
+    serialStatus.textContent = 'connected';
+    serialStatus.style.color = '#5a9a5a';
+    sendFrame(frames[currentFrame]);
+  } catch (e) {
+    serialStatus.textContent = e.message;
+    serialStatus.style.color = '#9a5a5a';
+  }
+}
+
+async function disconnectSerial() {
+  serialConnected = false;
+  try {
+    if (writer) { writer.releaseLock(); writer = null; }
+    if (port)   { await port.close();   port   = null; }
+  } catch (_) {}
+  serialBtn.textContent = '⬡  Connect Matrix';
+  serialBtn.classList.remove('connected');
+  serialStatus.textContent = 'disconnected';
+  serialStatus.style.color = '#3a3a3a';
+}
+
+// Send one RGB888 frame (matching index.html protocol)
+const serialPacket = new Uint8Array(1 + FRAME_BYTES);
+serialPacket[0] = 0xFF;
+
+function sendFrame(frame) {
+  if (!serialConnected || !writer || serialBusy) return;
+  serialBusy = true;
+  const bright = brightness.value / 100;
+  if (bright >= 1) {
+    for (let i = 0; i < FRAME_BYTES; i++) {
+      serialPacket[1 + i] = frame[i] >= 0xFF ? 0xFE : frame[i];
+    }
+  } else {
+    for (let i = 0; i < FRAME_BYTES; i++) {
+      const v = (frame[i] * bright) | 0;
+      serialPacket[1 + i] = v >= 0xFF ? 0xFE : v;
+    }
+  }
+  writer.write(serialPacket)
+    .then(() => { serialBusy = false; })
+    .catch(() => { serialBusy = false; disconnectSerial(); });
+}
+
+function maybeSendToMatrix() {
+  if (serialConnected && !isPlaying) sendFrame(frames[currentFrame]);
+}
+
+// ── Keyboard shortcuts ───────────────────────────────────────
+window.addEventListener('keydown', e => {
+  // Don't fire on input elements
+  if (e.target.tagName === 'INPUT') return;
+
+  switch (e.key) {
+    case 'p': case 'P': setTool('pencil');      break;
+    case 'e': case 'E': setTool('eraser');      break;
+    case 'f': case 'F': setTool('fill');        break;
+    case 'k': case 'K': setTool('eyedropper'); break;
+    case 'g': case 'G': toggleGrid();           break;
+    case 'c': case 'C': if (!e.ctrlKey && !e.metaKey) copyFrame();  break;
+    case 'v': case 'V': if (!e.ctrlKey && !e.metaKey) pasteFrame(); break;
+    case 'Delete': case 'Backspace': clearFrame(); break;
+    case ' ': e.preventDefault(); togglePlay(); break;
+    case 'ArrowLeft':
+      if (currentFrame > 0) selectFrame(currentFrame - 1);
+      break;
+    case 'ArrowRight':
+      if (currentFrame < frames.length - 1) selectFrame(currentFrame + 1);
+      break;
+  }
+});
+
+// ── Gallery ──────────────────────────────────────────────────
+// Each entry: { name, imageData (32x32 RGB888 Uint8Array), thumbCanvas }
+let galleryItems = [];
+let selectedGalleryIdx = -1;
+
+async function openGalleryFolder() {
+  if (!window.showDirectoryPicker) {
+    // Fallback: trigger file input
+    document.getElementById('gallery-file-input').click();
+    return;
+  }
+  try {
+    const dir = await window.showDirectoryPicker({ mode: 'read' });
+    const files = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && /\.(png|jpg|jpeg|gif|bmp|webp)$/i.test(entry.name)) {
+        files.push(await entry.getFile());
+      }
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    await addFilesToGallery(files);
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
+}
+
+async function loadGalleryFiles(fileList) {
+  const files = Array.from(fileList).sort((a, b) => a.name.localeCompare(b.name));
+  await addFilesToGallery(files);
+}
+
+async function addFilesToGallery(files) {
+  const statusEl = document.getElementById('gallery-status');
+  statusEl.textContent = `Loading ${files.length} image(s)…`;
+  for (const file of files) {
+    const data = await fileToFrame(file);
+    if (!data) continue;
+    const thumb = makeThumbCanvas(data, 60, 60);
+    galleryItems.push({ name: file.name.replace(/\.[^.]+$/, ''), data, thumb });
+  }
+  rebuildGallery();
+  statusEl.textContent = `${galleryItems.length} image(s)`;
+}
+
+// Decode an image file and scale it to 32x32, return RGB888 Uint8Array
+function fileToFrame(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img  = new Image();
+    img.onload = () => {
+      const tmp = document.createElement('canvas');
+      tmp.width = W; tmp.height = H;
+      const ctx = tmp.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, W, H);
+      const id  = ctx.getImageData(0, 0, W, H);
+      const buf = new Uint8Array(FRAME_BYTES);
+      for (let i = 0, j = 0; i < PIXELS; i++, j += 4) {
+        buf[i * 3]     = id.data[j];
+        buf[i * 3 + 1] = id.data[j + 1];
+        buf[i * 3 + 2] = id.data[j + 2];
+      }
+      URL.revokeObjectURL(url);
+      resolve(buf);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+function makeThumbCanvas(data, w, h) {
+  const cv  = document.createElement('canvas');
+  cv.width  = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = data[i]; d[j+1] = data[i+1]; d[j+2] = data[i+2]; d[j+3] = 255;
+  }
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  tmp.getContext('2d').putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, w, h);
+  return cv;
+}
+
+function rebuildGallery() {
+  const container = document.getElementById('gallery-container');
+  const empty     = document.getElementById('gallery-empty');
+  container.innerHTML = '';
+  if (galleryItems.length === 0) {
+    container.appendChild(empty);
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  galleryItems.forEach((item, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-item' + (i === selectedGalleryIdx ? ' selected' : '');
+    wrap.title = item.name;
+    wrap.onclick = () => selectGalleryItem(i);
+    wrap.ondblclick = () => { selectGalleryItem(i); loadSelectedToFrame(); };
+
+    const cv = item.thumb.cloneNode();
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(item.thumb, 0, 0);
+
+    const label = document.createElement('div');
+    label.className = 'gallery-item-name';
+    label.textContent = item.name;
+
+    wrap.appendChild(cv);
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  });
+}
+
+function selectGalleryItem(idx) {
+  selectedGalleryIdx = idx;
+  document.querySelectorAll('.gallery-item').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+}
+
+function loadSelectedToFrame() {
+  if (selectedGalleryIdx < 0 || selectedGalleryIdx >= galleryItems.length) return;
+  frames[currentFrame].set(galleryItems[selectedGalleryIdx].data);
+  renderFrame(currentFrame);
+  updateCurrentThumb();
+  maybeSendToMatrix();
+}
+
+function loadSelectedAsNewFrame() {
+  if (selectedGalleryIdx < 0 || selectedGalleryIdx >= galleryItems.length) return;
+  const newFrame = new Uint8Array(galleryItems[selectedGalleryIdx].data);
+  frames.splice(currentFrame + 1, 0, newFrame);
+  currentFrame++;
+  rebuildTimeline();
+  renderFrame(currentFrame);
+  maybeSendToMatrix();
+}
+
+function clearGallery() {
+  galleryItems = [];
+  selectedGalleryIdx = -1;
+  document.getElementById('gallery-status').textContent = '';
+  const container = document.getElementById('gallery-container');
+  container.innerHTML = '';
+  const empty = document.getElementById('gallery-empty');
+  empty.style.display = '';
+  container.appendChild(empty);
+}
+
+// ── Animation save/load (folder-based) ───────────────────────
+// Each saved animation is a folder containing frame_001.png, frame_002.png, ...
+// animationsRootHandle is the parent directory containing all animation folders.
+let animationsRootHandle = null;
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('visualizer-db', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(val, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror    = () => { db.close(); reject(tx.error); };
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly');
+    const r  = tx.objectStore('handles').get(key);
+    r.onsuccess = () => { db.close(); resolve(r.result || null); };
+    r.onerror   = () => { db.close(); reject(r.error); };
+  });
+}
+
+async function ensurePerm(handle, mode) {
+  if (!handle) return false;
+  const q = await handle.queryPermission({ mode });
+  if (q === 'granted') return true;
+  const r = await handle.requestPermission({ mode });
+  return r === 'granted';
+}
+
+async function pickAnimationsRoot() {
+  if (!window.showDirectoryPicker) {
+    alert('Your browser does not support the File System Access API. Use Chrome or Edge.');
+    return null;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    animationsRootHandle = handle;
+    await idbSet('animationsRoot', handle);
+    document.getElementById('anim-status').textContent = `root: ${handle.name}`;
+    await refreshAnimationsGallery();
+    return handle;
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+    return null;
+  }
+}
+
+async function ensureAnimationsRoot() {
+  if (animationsRootHandle && await ensurePerm(animationsRootHandle, 'readwrite')) {
+    return animationsRootHandle;
+  }
+  return await pickAnimationsRoot();
+}
+
+function frameToPngBlob(frame) {
+  const cv  = document.createElement('canvas');
+  cv.width  = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const id  = ctx.createImageData(W, H);
+  const d   = id.data;
+  for (let i = 0, j = 0; i < FRAME_BYTES; i += 3, j += 4) {
+    d[j] = frame[i]; d[j+1] = frame[i+1]; d[j+2] = frame[i+2]; d[j+3] = 255;
+  }
+  ctx.putImageData(id, 0, 0);
+  return new Promise(resolve => cv.toBlob(resolve, 'image/png'));
+}
+
+function newAnimation() {
+  if (frames.length > 1 || frames[0].some(v => v !== 0)) {
+    if (!confirm('Discard current animation and start a new one?')) return;
+  }
+  if (isPlaying) togglePlay();
+  frames = [new Uint8Array(FRAME_BYTES)];
+  currentFrame = 0;
+  document.getElementById('anim-name').value = '';
+  document.getElementById('anim-status').textContent = 'new animation';
+  rebuildTimeline();
+  renderFrame(0);
+  maybeSendToMatrix();
+}
+
+async function saveAnimation() {
+  const raw = (document.getElementById('anim-name').value || '').trim();
+  if (!raw) { alert('Enter an animation name first.'); return; }
+  const name = raw.replace(/[\/\\:*?"<>|]/g, '_');
+
+  const root = await ensureAnimationsRoot();
+  if (!root) return;
+
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = `Saving "${name}"…`;
+
+  try {
+    const dir = await root.getDirectoryHandle(name, { create: true });
+    // remove old frame_*.png so frame counts can shrink cleanly
+    for await (const entry of dir.values()) {
+      if (entry.kind === 'file' && /^frame_\d+\.png$/i.test(entry.name)) {
+        await dir.removeEntry(entry.name);
+      }
+    }
+    const pad = Math.max(3, String(frames.length).length);
+    for (let i = 0; i < frames.length; i++) {
+      const blob = await frameToPngBlob(frames[i]);
+      const num  = String(i + 1).padStart(pad, '0');
+      const fh   = await dir.getFileHandle(`frame_${num}.png`, { create: true });
+      const ws   = await fh.createWritable();
+      await ws.write(blob);
+      await ws.close();
+    }
+    statusEl.textContent = `saved "${name}" · ${frames.length} frames`;
+    await refreshAnimationsGallery();
+  } catch (e) {
+    statusEl.textContent = 'save failed: ' + e.message;
+    console.error(e);
+  }
+}
+
+// Cache the empty-state element so it survives container.innerHTML clears
+const animsEmptyEl = document.getElementById('anims-empty');
+
+async function refreshAnimationsGallery(force = false) {
+  const container = document.getElementById('anims-container');
+  const statusEl  = document.getElementById('anims-status');
+  container.innerHTML = '';
+
+  if (!animationsRootHandle) {
+    animsEmptyEl.textContent = 'Pick a root folder to store and browse animations';
+    container.appendChild(animsEmptyEl);
+    animsEmptyEl.style.display = '';
+    return;
+  }
+  if (!(await ensurePerm(animationsRootHandle, 'read'))) {
+    animsEmptyEl.textContent = 'Permission to read folder was denied';
+    container.appendChild(animsEmptyEl);
+    animsEmptyEl.style.display = '';
+    return;
+  }
+
+  statusEl.textContent = 'scanning…';
+  const anims = [];
+  try {
+    for await (const entry of animationsRootHandle.values()) {
+      if (entry.kind !== 'directory') continue;
+      const frameFiles = [];
+      for await (const f of entry.values()) {
+        if (f.kind === 'file' && /^frame_\d+\.png$/i.test(f.name)) frameFiles.push(f);
+      }
+      if (frameFiles.length === 0) continue;
+      frameFiles.sort((a, b) => a.name.localeCompare(b.name));
+      anims.push({ name: entry.name, dirHandle: entry, firstFile: frameFiles[0], count: frameFiles.length });
+    }
+  } catch (e) {
+    statusEl.textContent = 'scan failed';
+    console.error(e);
+    return;
+  }
+  anims.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (anims.length === 0) {
+    animsEmptyEl.textContent = `No animations in "${animationsRootHandle.name}" yet`;
+    container.appendChild(animsEmptyEl);
+    animsEmptyEl.style.display = '';
+    statusEl.textContent = `${animationsRootHandle.name}: empty`;
+    return;
+  }
+
+  animsEmptyEl.style.display = 'none';
+  for (const anim of anims) {
+    const wrap = document.createElement('div');
+    wrap.className = 'gallery-item';
+    wrap.title = `${anim.name} · ${anim.count} frames  (click to load)`;
+    wrap.onclick = () => loadAnimation(anim);
+
+    try {
+      const file = await anim.firstFile.getFile();
+      const data = await fileToFrame(file);
+      if (data) wrap.appendChild(makeThumbCanvas(data, 60, 60));
+    } catch (_) {}
+
+    const label = document.createElement('div');
+    label.className = 'gallery-item-name';
+    label.textContent = `${anim.name} (${anim.count})`;
+    wrap.appendChild(label);
+    container.appendChild(wrap);
+  }
+  statusEl.textContent = `${animationsRootHandle.name}: ${anims.length} animation(s)`;
+}
+
+async function loadAnimation(anim) {
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = `Loading "${anim.name}"…`;
+  try {
+    const frameFiles = [];
+    for await (const f of anim.dirHandle.values()) {
+      if (f.kind === 'file' && /^frame_\d+\.png$/i.test(f.name)) frameFiles.push(f);
+    }
+    frameFiles.sort((a, b) => a.name.localeCompare(b.name));
+    const newFrames = [];
+    for (const fh of frameFiles) {
+      const file = await fh.getFile();
+      const data = await fileToFrame(file);
+      if (data) newFrames.push(data);
+    }
+    if (newFrames.length === 0) { statusEl.textContent = 'empty animation'; return; }
+    frames = newFrames;
+    currentFrame = 0;
+    rebuildTimeline();
+    renderFrame(0);
+    document.getElementById('anim-name').value = anim.name;
+    statusEl.textContent = `loaded "${anim.name}" · ${newFrames.length} frames`;
+    maybeSendToMatrix();
+  } catch (e) {
+    statusEl.textContent = 'load failed: ' + e.message;
+    console.error(e);
+  }
+}
+
+// Try to restore the last-picked root folder on startup
+(async () => {
+  try {
+    const h = await idbGet('animationsRoot');
+    if (h) {
+      animationsRootHandle = h;
+      document.getElementById('anim-status').textContent = `root: ${h.name} (click to grant access)`;
+      // Don't auto-prompt for permission — wait for user action
+    }
+  } catch (_) {}
+})();
+
+// ── Init ─────────────────────────────────────────────────────
+buildPalette();
+selectColor(activeColor);
+renderFrame(0);
+renderGrid();
+rebuildTimeline();
+</script>
+</body>
+</html>
